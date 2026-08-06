@@ -169,40 +169,39 @@ final class GamepadManager: ObservableObject {
     
     /// Setup adaptive triggers for PS5 DualSense controllers
     private func setupAdaptiveTriggers(controller: GCController) {
-        // Check if this is a DualSense controller and adaptive triggers are enabled
+        // DualSense adaptive trigger support
+        // iOS 14.5+ provides GCDualSenseAdaptiveTrigger API for DualSense controllers
         guard #available(iOS 14.5, *) else {
             return
         }
         
-        // Check if it's a DualSense controller by checking for physicalInputProfile
-        guard let physicalInput = controller.physicalInputProfile else {
-            return
-        }
-        
-        // Check if the controller has adaptive triggers (DualSense-specific feature)
-        // Note: ControllerRemapper is defined in Views/ControllerRemapperView.swift
-        guard ControllerRemapper.shared.adaptiveTriggersEnabled else {
+        // Get adaptive trigger settings from UserDefaults
+        let adaptiveTriggersEnabled = UserDefaults.standard.object(forKey: "AdaptiveTriggersEnabled") as? Bool ?? true
+        guard adaptiveTriggersEnabled else {
             AppLogger.info("[GamepadManager] Adaptive triggers disabled in settings")
             return
         }
+        
+        // Get user-configured trigger strengths (0.0 - 1.0)
+        let leftStrength = Float(UserDefaults.standard.object(forKey: "LeftTriggerStrength") as? Double ?? 0.5)
+        let rightStrength = Float(UserDefaults.standard.object(forKey: "RightTriggerStrength") as? Double ?? 0.5)
+        
+        // Access the physical input profile (not optional in iOS 14+)
+        let physicalInput = controller.physicalInputProfile
         
         AppLogger.info("[GamepadManager] Configuring DualSense adaptive triggers")
         
         // Configure left trigger (L2)
         if let leftTrigger = physicalInput.buttons[GCInputLeftTrigger] {
-            // Get the strength setting from user preferences (0.0 - 1.0)
-            let strength = Float(ControllerRemapper.shared.leftTriggerStrength)
-            
-            // Set up feedback trigger effect - provides resistance when pressed
-            // The strength value controls how much resistance the trigger provides
-            configureTriggerEffect(for: leftTrigger, strength: strength, trigger: .leftTrigger)
+            configureTriggerEffect(for: leftTrigger, strength: leftStrength, trigger: .leftTrigger)
         }
         
         // Configure right trigger (R2)
         if let rightTrigger = physicalInput.buttons[GCInputRightTrigger] {
-            let strength = Float(ControllerRemapper.shared.rightTriggerStrength)
-            configureTriggerEffect(for: rightTrigger, strength: strength, trigger: .rightTrigger)
+            configureTriggerEffect(for: rightTrigger, strength: rightStrength, trigger: .rightTrigger)
         }
+        
+        AppLogger.info("[GamepadManager] DualSense adaptive triggers configured (L: \(leftStrength), R: \(rightStrength))")
     }
     
     @available(iOS 14.5, *)
