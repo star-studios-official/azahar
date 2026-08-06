@@ -9,8 +9,8 @@ import SwiftUI
 struct TouchControlsView: View {
     @ObservedObject var viewModel: EmulationViewModel
     @StateObject private var controllerManager = ControllerManager.shared
+    @ObservedObject private var settings = TouchControlSettings.shared
     @Environment(\.horizontalSizeClass) private var sizeClass
-    @State private var settings = TouchControlSettings.load()
     @State private var draggedButton: String?
     @State private var dragOffset: CGSize = .zero
 
@@ -97,8 +97,10 @@ struct TouchControlsView: View {
             AnalogStickView(
                 position: $viewModel.leftStickPosition,
                 onPositionChanged: { x, y in
-                    let nx = Float(x / 30)
-                    let ny = Float(y / 30)
+                    // Normalize by maxRadius to get values in [-1.0, 1.0]
+                    let maxRadius = joystickSize * 0.35
+                    let nx = Float(x / maxRadius)
+                    let ny = Float(y / maxRadius)
                     az_analog_event(Int32(AZ_STICK_LEFT), nx, ny)
                 },
                 size: joystickSize,
@@ -110,8 +112,10 @@ struct TouchControlsView: View {
             AnalogStickView(
                 position: $viewModel.rightStickPosition,
                 onPositionChanged: { x, y in
-                    let nx = Float(x / 30)
-                    let ny = Float(y / 30)
+                    // Normalize by maxRadius to get values in [-1.0, 1.0]
+                    let maxRadius = joystickSize * 0.35
+                    let nx = Float(x / maxRadius)
+                    let ny = Float(y / maxRadius)
                     az_analog_event(Int32(AZ_STICK_C), nx, ny)
                 },
                 size: joystickSize,
@@ -182,8 +186,10 @@ struct TouchControlsView: View {
             AnalogStickView(
                 position: $viewModel.leftStickPosition,
                 onPositionChanged: { x, y in
-                    let nx = Float(x / 30)
-                    let ny = Float(y / 30)
+                    // Normalize by maxRadius to get values in [-1.0, 1.0]
+                    let maxRadius = joystickSize * 0.35
+                    let nx = Float(x / maxRadius)
+                    let ny = Float(y / maxRadius)
                     az_analog_event(Int32(AZ_STICK_LEFT), nx, ny)
                 },
                 size: joystickSize,
@@ -195,8 +201,10 @@ struct TouchControlsView: View {
             AnalogStickView(
                 position: $viewModel.rightStickPosition,
                 onPositionChanged: { x, y in
-                    let nx = Float(x / 30)
-                    let ny = Float(y / 30)
+                    // Normalize by maxRadius to get values in [-1.0, 1.0]
+                    let maxRadius = joystickSize * 0.35
+                    let nx = Float(x / maxRadius)
+                    let ny = Float(y / maxRadius)
                     az_analog_event(Int32(AZ_STICK_C), nx, ny)
                 },
                 size: joystickSize,

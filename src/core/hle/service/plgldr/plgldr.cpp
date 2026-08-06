@@ -98,9 +98,17 @@ SERIALIZE_IMPL(PLG_LDR)
 void PLG_LDR::OnProcessRun(Kernel::Process& process, Kernel::KernelSystem& kernel) {
     constexpr u32 TITLE_ID_APP_MASK = 0xFFFFFFED;
     constexpr u32 TITLE_ID_APP_VALUE = 0x00040000;
+    
+    LOG_INFO(Service_PLGLDR, "OnProcessRun called for title {:016X}", process.codeset->program_id);
+    LOG_INFO(Service_PLGLDR, "Plugin loader enabled: {}, Plugin already loaded: {}", 
+             plgldr_context.is_enabled, plgldr_context.plugin_loaded);
+    
     if (!plgldr_context.is_enabled || plgldr_context.plugin_loaded ||
         (static_cast<u32>(process.codeset->program_id >> 32) & TITLE_ID_APP_MASK) !=
             TITLE_ID_APP_VALUE) {
+        LOG_DEBUG(Service_PLGLDR, "Plugin loading skipped - enabled={}, loaded={}, title_check={}",
+                  plgldr_context.is_enabled, plgldr_context.plugin_loaded,
+                  (static_cast<u32>(process.codeset->program_id >> 32) & TITLE_ID_APP_MASK) == TITLE_ID_APP_VALUE);
         return;
     }
     {
@@ -111,6 +119,7 @@ void PLG_LDR::OnProcessRun(Kernel::Process& process, Kernel::KernelSystem& kerne
         // Check for "B #0x20" and "MOV R4, LR" instructions
         bool is_homebrew = u32_le(value1) == 0xEA000006 && u32_le(value2) == 0xE1A0400E;
         if (is_homebrew) {
+            LOG_INFO(Service_PLGLDR, "Homebrew detected, skipping plugin loading");
             return;
         }
     }
@@ -122,6 +131,7 @@ void PLG_LDR::OnProcessRun(Kernel::Process& process, Kernel::KernelSystem& kerne
         plgldr_context.user_load_parameters.path[0]) {
         std::string plugin_file = FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir) +
                                   std::string(plgldr_context.user_load_parameters.path + 1);
+        LOG_INFO(Service_PLGLDR, "Loading user-specified plugin: {}", plugin_file);
         plgldr_context.is_default_path = false;
         plgldr_context.plugin_path = plugin_file;
         plugin_loader.Load(plgldr_context, process, kernel, *this);
@@ -130,20 +140,27 @@ void PLG_LDR::OnProcessRun(Kernel::Process& process, Kernel::KernelSystem& kerne
             FileUtil::GetUserPath(FileUtil::UserPath::SDMCDir) + "luma/plugins/";
         const std::string plugin_tid =
             plugin_root + fmt::format("{:016X}", process.codeset->program_id);
+        LOG_INFO(Service_PLGLDR, "Scanning for plugins in: {}", plugin_tid);
         FileUtil::FSTEntry entry;
         FileUtil::ScanDirectoryTree(plugin_tid, entry);
+        LOG_INFO(Service_PLGLDR, "Found {} entries in plugin directory", entry.children.size());
         for (const auto& child : entry.children) {
             if (!child.isDirectory && child.physicalName.ends_with(".3gx")) {
+                LOG_INFO(Service_PLGLDR, "Found plugin: {}", child.physicalName);
                 plgldr_context.is_default_path = false;
                 plgldr_context.plugin_path = child.physicalName;
                 if (plugin_loader.Load(plgldr_context, process, kernel, *this) ==
                     Loader::ResultStatus::Success) {
+                    LOG_INFO(Service_PLGLDR, "Successfully loaded plugin: {}", child.physicalName);
                     return;
+                } else {
+                    LOG_ERROR(Service_PLGLDR, "Failed to load plugin: {}", child.physicalName);
                 }
             }
         }
 
         const std::string default_path = plugin_root + "default.3gx";
+        LOG_INFO(Service_PLGLDR, "Checking for default plugin: {}", default_path);
         if (FileUtil::Exists(default_path)) {
             plgldr_context.is_default_path = true;
             plgldr_context.plugin_path = default_path;

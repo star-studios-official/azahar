@@ -6,30 +6,36 @@ import Foundation
 import UIKit
 
 /// Touch control layout settings (matches Android InputOverlay logic)
-struct TouchControlSettings: Codable {
+class TouchControlSettings: ObservableObject, Codable {
     // Button scales (0.0 - 2.0, default based on Android)
-    var faceButtonScale: CGFloat = 0.5      // A/B/X/Y (50% of screen min dimension)
-    var dpadScale: CGFloat = 0.5            // D-Pad
-    var triggerScale: CGFloat = 0.7         // L/R/ZL/ZR (70%)
-    var joystickScale: CGFloat = 0.7        // Circle Pad / C-Stick (70%)
-    var centerButtonScale: CGFloat = 0.4    // Start/Select/Home
+    @Published var faceButtonScale: CGFloat = 0.5      // A/B/X/Y (50% of screen min dimension)
+    @Published var dpadScale: CGFloat = 0.5            // D-Pad
+    @Published var triggerScale: CGFloat = 0.7         // L/R/ZL/ZR (70%)
+    @Published var joystickScale: CGFloat = 0.7        // Circle Pad / C-Stick (70%)
+    @Published var centerButtonScale: CGFloat = 0.4    // Start/Select/Home
     
     // Button positions (0.0 - 1.0 as fraction of screen)
     // Landscape layout
-    var landscapePositions: [String: CGPoint] = [:]
+    @Published var landscapePositions: [String: CGPoint] = [:]
     
     // Portrait layout
-    var portraitPositions: [String: CGPoint] = [:]
+    @Published var portraitPositions: [String: CGPoint] = [:]
     
     // Button opacity (0.0 - 1.0)
-    var buttonOpacity: CGFloat = 0.7
+    @Published var buttonOpacity: CGFloat = 0.7
     
     // Edit mode enabled
-    var isEditModeEnabled: Bool = false
+    @Published var isEditModeEnabled: Bool = false
     
     static let shared = TouchControlSettings()
     
     private static let userDefaultsKey = "TouchControlSettings"
+    
+    private enum CodingKeys: String, CodingKey {
+        case faceButtonScale, dpadScale, triggerScale, joystickScale, centerButtonScale
+        case landscapePositions, portraitPositions
+        case buttonOpacity, isEditModeEnabled
+    }
     
     static func load() -> TouchControlSettings {
         guard let data = UserDefaults.standard.data(forKey: userDefaultsKey),

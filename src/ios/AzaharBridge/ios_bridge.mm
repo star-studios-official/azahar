@@ -202,7 +202,11 @@ static void RunCitra(const std::string& filepath) {
     // Create windows — Vulkan path (iOS always uses Vulkan via MoltenVK)
     LOG_DEBUG(Frontend, "Creating EmuWindow for iOS (Vulkan/MoltenVK)");
     window = CreateEmuWindow(pending_primary_layer, false);
-    secondary_window = CreateEmuWindow(pending_secondary_layer, true);
+    // Secondary window is created lazily when external display connects via az_emu_secondary_surface_set
+    if (pending_secondary_layer) {
+        LOG_INFO(Frontend, "External display layer already set, creating secondary window");
+        secondary_window = CreateEmuWindow(pending_secondary_layer, true);
+    }
 
     if (!window) {
         LOG_CRITICAL(Frontend, "Failed to create EmuWindowIOS - window is NULL");
@@ -455,7 +459,16 @@ void az_emu_secondary_surface_set(void* metal_layer, float scale) {
     pending_secondary_layer = layer;
     pending_secondary_scale = scale;
 
-    if (secondary_window) {
+    // Create secondary window lazily if it doesn't exist and we have a valid layer
+    if (!secondary_window && layer && Core::System::GetInstance().IsPoweredOn()) {
+        LOG_INFO(Frontend, "Creating secondary window for external display");
+        secondary_window = CreateEmuWindow(layer, true);
+        if (secondary_window) {
+            // Notify the system that the secondary window is ready
+            Core::System::GetInstance().GPU().Renderer().NotifySurfaceChanged(true);
+        }
+    } else if (secondary_window) {
+        // Update existing secondary window surface
         if (secondary_window->OnSurfaceChanged(layer)) {
             if (Core::System::GetInstance().IsPoweredOn()) {
                 Core::System::GetInstance().GPU().Renderer().NotifySurfaceChanged(true);

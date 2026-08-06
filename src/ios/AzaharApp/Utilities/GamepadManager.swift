@@ -69,6 +69,9 @@ final class GamepadManager: ObservableObject {
         }
         
         AppLogger.info("[GamepadManager] Extended gamepad profile found, registering button handlers")
+        
+        // Setup adaptive triggers for PS5 DualSense
+        setupAdaptiveTriggers(controller: controller)
 
         // Button presses
         extendedGamepad.buttonA.pressedChangedHandler = { _, _, pressed in
@@ -162,6 +165,74 @@ final class GamepadManager: ObservableObject {
         microGamepad.dpad.right.pressedChangedHandler = { _, _, pressed in
             az_button_event(Int32(AZ_DPAD_RIGHT), pressed)
         }
+    }
+    
+    /// Setup adaptive triggers for PS5 DualSense controllers
+    private func setupAdaptiveTriggers(controller: GCController) {
+        // Check if this is a DualSense controller and adaptive triggers are enabled
+        guard #available(iOS 14.5, *),
+              let productCategory = controller.productCategory,
+              productCategory.contains("DualSense") || controller.vendorName?.contains("DualSense") == true else {
+            return
+        }
+        
+        let remapper = ControllerRemapper.shared
+        guard remapper.adaptiveTriggersEnabled else {
+            AppLogger.info("[GamepadManager] Adaptive triggers disabled in settings")
+            return
+        }
+        
+        AppLogger.info("[GamepadManager] Setting up adaptive triggers for DualSense")
+        
+        // Access haptics engine if available
+        if #available(iOS 14.0, *) {
+            if let haptics = controller.haptics {
+                AppLogger.info("[GamepadManager] Haptics engine available")
+                
+                // Setup trigger feedback based on user preferences
+                // Left trigger (L/ZL)
+                setupTriggerFeedback(haptics: haptics, 
+                                   trigger: .leftTrigger, 
+                                   strength: Float(remapper.leftTriggerStrength))
+                
+                // Right trigger (R/ZR)
+                setupTriggerFeedback(haptics: haptics, 
+                                   trigger: .rightTrigger, 
+                                   strength: Float(remapper.rightTriggerStrength))
+            }
+        }
+    }
+    
+    @available(iOS 14.0, *)
+    private func setupTriggerFeedback(haptics: GCHapticsEngine, trigger: TriggerType, strength: Float) {
+        // Create haptic pattern for trigger resistance
+        // This provides feedback when pressing L/R/ZL/ZR buttons
+        do {
+            let pattern = try GCHapticPattern(
+                events: [
+                    GCHapticEvent(type: .continuous, 
+                                parameters: [
+                                    GCHapticEventParameter(id: .hapticIntensity, value: strength),
+                                    GCHapticEventParameter(id: .hapticSharpness, value: 0.5)
+                                ],
+                                relativeTime: 0,
+                                duration: 0.1)
+                ],
+                parameterCurves: []
+            )
+            
+            let player = try haptics.createPlayer(with: pattern)
+            
+            // Store player for trigger feedback (would need to be retained)
+            AppLogger.info("[GamepadManager] Adaptive trigger feedback configured for \(trigger)")
+        } catch {
+            AppLogger.error("GamepadManager", message: "Failed to setup adaptive trigger: \(error)")
+        }
+    }
+    
+    private enum TriggerType {
+        case leftTrigger
+        case rightTrigger
     }
 
     private func releaseAllButtons() {

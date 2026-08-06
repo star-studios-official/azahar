@@ -392,8 +392,17 @@ void Config::ReadValues() {
     }
     ReadSetting("System", Settings::values.init_ticks_type);
     ReadSetting("System", Settings::values.init_ticks_override);
-    ReadSetting("System", Settings::values.plugin_loader_enabled);
-    ReadSetting("System", Settings::values.allow_plugin_loader);
+    
+    // Enable plugin loader by default on iOS if not explicitly set
+    if (!ios_config->Exists("System", "plugin_loader")) {
+        Settings::values.plugin_loader_enabled.SetValue(true);
+        Settings::values.allow_plugin_loader.SetValue(true);
+        LOG_INFO(Config, "Plugin loader enabled by default on iOS");
+    } else {
+        ReadSetting("System", Settings::values.plugin_loader_enabled);
+        ReadSetting("System", Settings::values.allow_plugin_loader);
+    }
+    
     ReadSetting("System", Settings::values.steps_per_hour);
     ReadSetting("System", Settings::values.apply_region_free_patch);
 

@@ -203,9 +203,8 @@ final class EmulationViewModel: ObservableObject {
     }
     
     func toggleEditControls() {
-        var settings = TouchControlSettings.load()
-        settings.isEditModeEnabled.toggle()
-        settings.save()
+        TouchControlSettings.shared.isEditModeEnabled.toggle()
+        TouchControlSettings.shared.save()
     }
     
     func loadAmiibo() {

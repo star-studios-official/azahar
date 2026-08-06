@@ -93,9 +93,16 @@ class ExternalDisplayManager: ObservableObject {
             screen.currentMode = mode
         }
         
-        // Load saved display mode preference, default to fullscreen for external displays
+        // ManicEMU-style: Auto-detect and default to fullscreen mode
         let savedMode = UserDefaults.standard.integer(forKey: "external_display_mode")
         if savedMode == 0 && !UserDefaults.standard.bool(forKey: "has_set_external_display_mode") {
+            // First-time external display connection - auto-set to fullscreen
+            displayMode = .externalFullscreen
+            UserDefaults.standard.set(true, forKey: "has_set_external_display_mode")
+            print("Auto-configured external display for fullscreen (ManicEMU-style)")
+        } else {
+            displayMode = ExternalDisplayMode(rawValue: savedMode) ?? .externalFullscreen
+        }
             // First time connecting external display - default to fullscreen
             displayMode = .externalFullscreen
             UserDefaults.standard.set(ExternalDisplayMode.externalFullscreen.rawValue, forKey: "external_display_mode")

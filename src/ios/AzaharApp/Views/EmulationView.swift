@@ -10,8 +10,10 @@ struct EmulationView: View {
     @StateObject private var viewModel: EmulationViewModel
     @StateObject private var externalDisplayManager = ExternalDisplayManager.shared
     @StateObject private var gamepadManager = GamepadManager()
+    @StateObject private var touchControlSettings = TouchControlSettings.shared
     @State private var showPauseMenu = false
     @State private var showDisplayModeMenu = false
+    @State private var showAmiiboPicker = false
     @State private var isLandscape = UIDevice.current.orientation.isLandscape
     @State private var orientationObserver: NSObjectProtocol?
 
@@ -137,8 +139,16 @@ struct EmulationView: View {
                     onExit: {
                         viewModel.stop()
                         appState.stopEmulation()
+                    },
+                    onLoadAmiibo: {
+                        showAmiiboPicker = true
                     }
                 )
+            }
+        }
+        .sheet(isPresented: $showAmiiboPicker) {
+            AmiiboFilePicker(isPresented: $showAmiiboPicker) { url in
+                viewModel.loadAmiiboFile(url: url)
             }
         }
         .onAppear {
@@ -154,6 +164,11 @@ struct EmulationView: View {
                 if newOrientation.isLandscape || newOrientation == .portrait {
                     isLandscape = newOrientation.isLandscape
                     AppLogger.debug("[EmulationView] Orientation changed: \(newOrientation.isLandscape ? "landscape" : "portrait")")
+                    
+                    // Notify C++ side about orientation change for framebuffer layout
+                    let isPortrait = !newOrientation.isLandscape
+                    az_update_framebuffer(isPortrait)
+                    
                     resetJoysticks()
                 }
             }
@@ -180,6 +195,7 @@ struct PauseMenuView: View {
     @State private var showLoadStateDialog = false
     let onResume: () -> Void
     let onExit: () -> Void
+    let onLoadAmiibo: () -> Void
 
     var body: some View {
         ZStack {
@@ -261,7 +277,7 @@ struct PauseMenuView: View {
                         
                         // Amiibo
                         PauseButton(title: "Load Amiibo", icon: "circle.grid.2x2.fill") {
-                            viewModel.loadAmiibo()
+                            onLoadAmiibo()
                         }
                         
                         // Screenshot
