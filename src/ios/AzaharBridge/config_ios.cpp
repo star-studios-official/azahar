@@ -26,37 +26,37 @@
 #include "ios/AzaharBridge/input_manager_ios.h"
 
 namespace {
-constexpr char IOSCameraBack[] = "ios:back";
-constexpr char IOSCameraFront[] = "ios:front";
+    constexpr char IOSCameraBack[] = "ios:back";
+    constexpr char IOSCameraFront[] = "ios:front";
 
-// Test if JIT execution is actually allowed on this iOS device
-// Returns true if JIT will work (StikDebug active or proper signing), false otherwise
-bool TestJITCapability() {
-    // Try to allocate a small JIT memory region with MAP_JIT flag
-    void* test_mem = mmap(nullptr, 4096, PROT_READ | PROT_WRITE, 
-                          MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT, -1, 0);
-    
-    if (test_mem == MAP_FAILED) {
-        LOG_WARNING(Config, "JIT test failed: mmap with MAP_JIT flag failed (errno={}). "
-                           "JIT is NOT available - StikDebug not active or missing entitlement.", errno);
-        return false;
-    }
-    
-    // Try to actually make the memory executable - this is the real test
-    // StikDebug grants the process the dynamic-codesigning entitlement which allows this
-    if (mprotect(test_mem, 4096, PROT_READ | PROT_EXEC) != 0) {
-        LOG_WARNING(Config, "JIT test failed: mprotect to PROT_EXEC failed (errno={}). "
-                           "JIT is NOT available - StikDebug not active.", errno);
+    // Test if JIT execution is actually allowed on this iOS device
+    // Returns true if JIT will work (StikDebug active or proper signing), false otherwise
+    bool TestJITCapability() {
+        // Try to allocate a small JIT memory region with MAP_JIT flag
+        void* test_mem = mmap(nullptr, 4096, PROT_READ | PROT_WRITE,
+                              MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT, -1, 0);
+
+        if (test_mem == MAP_FAILED) {
+            LOG_WARNING(Config, "JIT test failed: mmap with MAP_JIT flag failed (errno={}). "
+            "JIT is NOT available - StikDebug not active or missing entitlement.", errno);
+            return false;
+        }
+
+        // Try to actually make the memory executable - this is the real test
+        // StikDebug grants the process the dynamic-codesigning entitlement which allows this
+        if (mprotect(test_mem, 4096, PROT_READ | PROT_EXEC) != 0) {
+            LOG_WARNING(Config, "JIT test failed: mprotect to PROT_EXEC failed (errno={}). "
+            "JIT is NOT available - StikDebug not active.", errno);
+            munmap(test_mem, 4096);
+            return false;
+        }
+
+        // Clean up test allocation
         munmap(test_mem, 4096);
-        return false;
+
+        LOG_INFO(Config, "JIT capability test PASSED - StikDebug is active or app is properly signed with JIT entitlement");
+        return true;
     }
-    
-    // Clean up test allocation
-    munmap(test_mem, 4096);
-    
-    LOG_INFO(Config, "JIT capability test PASSED - StikDebug is active or app is properly signed with JIT entitlement");
-    return true;
-}
 } // Anonymous namespace
 
 Config::Config() {
@@ -83,14 +83,14 @@ bool Config::LoadINI(const std::string& default_contents, bool retry) {
             std::string ini_buffer;
             FileUtil::ReadFileToString(true, location, ini_buffer);
             ios_config =
-                std::make_unique<INIReader>(ini_buffer.c_str(), ini_buffer.size()); // Reopen file
+            std::make_unique<INIReader>(ini_buffer.c_str(), ini_buffer.size()); // Reopen file
 
             return LoadINI(default_contents, false);
         }
         LOG_ERROR(Config, "Failed.");
         return false;
     }
-    
+
     // Only log config loading if the setting is enabled
     if (Settings::values.log_config_loading.GetValue()) {
         LOG_INFO(Config, "Successfully loaded {}", location);
@@ -118,7 +118,7 @@ static const std::array<int, Settings::NativeAnalog::NumAnalogs> default_analogs
 template <>
 void Config::ReadSetting(const std::string& group, Settings::Setting<std::string>& setting) {
     std::string setting_value =
-        ios_config->Get(group, setting.GetLabel(), setting.GetDefault());
+    ios_config->Get(group, setting.GetLabel(), setting.GetDefault());
     if (setting_value.empty()) {
         setting_value = setting.GetDefault();
     }
@@ -162,18 +162,18 @@ void Config::ReadValues() {
         "Controls", "motion_device",
         "engine:motion_emu,update_period:100,sensitivity:0.01,tilt_clamp:90.0");
     Settings::values.current_input_profile.touch_device =
-        ios_config->GetString("Controls", "touch_device", "engine:emu_window");
+    ios_config->GetString("Controls", "touch_device", "engine:emu_window");
     Settings::values.current_input_profile.udp_input_address = ios_config->GetString(
         "Controls", "udp_input_address", InputCommon::CemuhookUDP::DEFAULT_ADDR);
     Settings::values.current_input_profile.udp_input_port =
-        static_cast<u16>(ios_config->GetInteger("Controls", "udp_input_port",
-                                                    InputCommon::CemuhookUDP::DEFAULT_PORT));
+    static_cast<u16>(ios_config->GetInteger("Controls", "udp_input_port",
+                                            InputCommon::CemuhookUDP::DEFAULT_PORT));
 
     ReadSetting("Controls", Settings::values.use_artic_base_controller);
 
     // Core - Read JIT settings and check if JIT is actually available
     ReadSetting("Core", Settings::values.use_cpu_jit);
-    
+
     // Test if JIT is actually available on iOS - it requires proper code signing or StikDebug
     // JIT requires either:
     //   1. App signed with development certificate + com.apple.security.cs.allow-jit entitlement, OR
@@ -181,12 +181,12 @@ void Config::ReadValues() {
     // Without either, attempting to execute JIT-compiled code will crash with KERN_PROTECTION_FAILURE.
     static bool jit_capability_tested = false;
     static bool jit_available = false;
-    
+
     if (!jit_capability_tested) {
         jit_available = TestJITCapability();
         jit_capability_tested = true;
     }
-    
+
     // Respect user's choice: only enable JIT if BOTH conditions are met:
     // 1. User enabled "Use CPU JIT" toggle in settings
     // 2. JIT capability test passed (proper signing OR StikDebug enabled JIT)
@@ -197,8 +197,8 @@ void Config::ReadValues() {
             Settings::values.use_fastinterp = false;
         } else {
             LOG_WARNING(Config, "CPU JIT: Requested but NOT AVAILABLE due to code signing restrictions. "
-                               "Forcing JIT OFF to prevent crashes. Enable JIT via StikDebug or sign with "
-                               "a development certificate that includes com.apple.security.cs.allow-jit entitlement.");
+            "Forcing JIT OFF to prevent crashes. Enable JIT via StikDebug or sign with "
+            "a development certificate that includes com.apple.security.cs.allow-jit entitlement.");
             Settings::values.use_cpu_jit = false;
             // Enable FastInterp as fallback
             Settings::values.use_fastinterp = true;
@@ -208,7 +208,7 @@ void Config::ReadValues() {
         // Enable FastInterp when JIT is disabled
         Settings::values.use_fastinterp = true;
     }
-    
+
     // Shader JIT follows same logic as CPU JIT
     ReadSetting("Renderer", Settings::values.use_shader_jit);
     if (Settings::values.use_shader_jit.GetValue()) {
@@ -216,51 +216,51 @@ void Config::ReadValues() {
             LOG_INFO(Config, "Shader JIT: ENABLED (user setting ON, capability test passed)");
         } else {
             LOG_WARNING(Config, "Shader JIT: Requested but NOT AVAILABLE due to code signing restrictions. "
-                               "Forcing shader JIT OFF to prevent crashes.");
+            "Forcing shader JIT OFF to prevent crashes.");
             Settings::values.use_shader_jit = false;
         }
     } else {
         LOG_INFO(Config, "Shader JIT: DISABLED by user setting (using software shader interpreter)");
     }
-    
-    LOG_INFO(Config, "FastInterp: {} (optimized cached interpreter)", 
+
+    LOG_INFO(Config, "FastInterp: {} (optimized cached interpreter)",
              Settings::values.use_fastinterp.GetValue() ? "ENABLED" : "DISABLED");
-    
+
     ReadSetting("Core", Settings::values.cpu_clock_percentage);
 
     // Renderer
     Settings::values.use_gles = ios_config->GetBoolean("Renderer", "use_gles", true);
     Settings::values.shaders_accurate_mul =
-        ios_config->GetBoolean("Renderer", "shaders_accurate_mul", false);
+    ios_config->GetBoolean("Renderer", "shaders_accurate_mul", false);
     ReadSetting("Renderer", Settings::values.graphics_api);
     // iOS only supports Vulkan; fix invalid graphics_api values from old configs
     if (Settings::values.graphics_api.GetValue() != Settings::GraphicsAPI::Vulkan) {
         LOG_WARNING(Config, "Invalid graphics_api value {} detected on iOS (only Vulkan is supported), forcing Vulkan",
                     static_cast<int>(Settings::values.graphics_api.GetValue()));
         Settings::values.graphics_api = Settings::GraphicsAPI::Vulkan;
-        
+
         // Write corrected value back to config.ini to stop repeated warnings
         std::string ini_content;
         FileUtil::ReadFileToString(true, ios_config_loc, ini_content);
-        
+
         // Update graphics_api in [Renderer] section
         const std::string section_header = "[Renderer]";
         const std::string key_pattern = "graphics_api =";
-        
+
         size_t section_pos = ini_content.find(section_header);
         if (section_pos != std::string::npos) {
             size_t key_pos = ini_content.find(key_pattern, section_pos);
             size_t next_section = ini_content.find("\n[", section_pos + 1);
-            
-            if (key_pos != std::string::npos && 
+
+            if (key_pos != std::string::npos &&
                 (next_section == std::string::npos || key_pos < next_section)) {
                 // Key exists, update its value to 2 (Vulkan)
                 size_t value_start = ini_content.find("=", key_pos) + 1;
-                size_t value_end = ini_content.find("\n", value_start);
-                ini_content.replace(value_start, value_end - value_start, " 2");
-                FileUtil::WriteStringToFile(true, ios_config_loc, ini_content);
-                LOG_INFO(Config, "Updated graphics_api to 2 (Vulkan) in config.ini");
-            }
+            size_t value_end = ini_content.find("\n", value_start);
+            ini_content.replace(value_start, value_end - value_start, " 2");
+            FileUtil::WriteStringToFile(true, ios_config_loc, ini_content);
+            LOG_INFO(Config, "Updated graphics_api to 2 (Vulkan) in config.ini");
+                }
         }
     }
     ReadSetting("Renderer", Settings::values.async_presentation);
@@ -269,7 +269,7 @@ void Config::ReadValues() {
     ReadSetting("Renderer", Settings::values.disable_spirv_optimizer);
     ReadSetting("Renderer", Settings::values.use_hw_shader);
     // Shader JIT is handled above in Core section with CPU JIT
-    
+
     ReadSetting("Renderer", Settings::values.resolution_factor);
     ReadSetting("Renderer", Settings::values.use_disk_shader_cache);
     ReadSetting("Renderer", Settings::values.use_vsync);
@@ -292,7 +292,7 @@ void Config::ReadValues() {
     else if (Settings::values.render_3d.GetValue() == Settings::StereoRenderOption::Interlaced)
         default_shader = "Horizontal (builtin)";
     Settings::values.pp_shader_name =
-        ios_config->GetString("Renderer", "pp_shader_name", default_shader);
+    ios_config->GetString("Renderer", "pp_shader_name", default_shader);
     ReadSetting("Renderer", Settings::values.filter_mode);
     ReadSetting("Renderer", Settings::values.use_integer_scaling);
 
@@ -315,12 +315,12 @@ void Config::ReadValues() {
     }
     Settings::values.layout_option = static_cast<Settings::LayoutOption>(layoutInt);
     Settings::values.screen_gap =
-        static_cast<int>(ios_config->GetReal("Layout", "screen_gap", 0));
+    static_cast<int>(ios_config->GetReal("Layout", "screen_gap", 0));
     Settings::values.large_screen_proportion =
-        static_cast<float>(ios_config->GetReal("Layout", "large_screen_proportion", 2.25));
+    static_cast<float>(ios_config->GetReal("Layout", "large_screen_proportion", 2.25));
     Settings::values.small_screen_position = static_cast<Settings::SmallScreenPosition>(
         ios_config->GetInteger("Layout", "small_screen_position",
-                                   static_cast<int>(Settings::SmallScreenPosition::TopRight)));
+                               static_cast<int>(Settings::SmallScreenPosition::TopRight)));
     ReadSetting("Layout", Settings::values.screen_gap);
     ReadSetting("Layout", Settings::values.custom_top_x);
     ReadSetting("Layout", Settings::values.custom_top_y);
@@ -337,12 +337,12 @@ void Config::ReadValues() {
     ReadSetting("Layout", Settings::values.upright_screen);
 
     Settings::values.portrait_layout_option =
-        static_cast<Settings::PortraitLayoutOption>(ios_config->GetInteger(
-            "Layout", "portrait_layout_option",
-            static_cast<int>(Settings::PortraitLayoutOption::PortraitTopFullWidth)));
+    static_cast<Settings::PortraitLayoutOption>(ios_config->GetInteger(
+        "Layout", "portrait_layout_option",
+        static_cast<int>(Settings::PortraitLayoutOption::PortraitTopFullWidth)));
     Settings::values.secondary_display_layout = static_cast<Settings::SecondaryDisplayLayout>(
         ios_config->GetInteger("Layout", Settings::HKeys::secondary_display_layout.c_str(),
-                                   static_cast<int>(Settings::SecondaryDisplayLayout::None)));
+                               static_cast<int>(Settings::SecondaryDisplayLayout::None)));
     ReadSetting("Layout", Settings::values.custom_portrait_top_x);
     ReadSetting("Layout", Settings::values.custom_portrait_top_y);
     ReadSetting("Layout", Settings::values.custom_portrait_top_width);
@@ -384,7 +384,7 @@ void Config::ReadValues() {
     ReadSetting("System", Settings::values.init_clock);
     {
         std::string time =
-            ios_config->GetString("System", Settings::HKeys::init_time.c_str(), "946681277");
+        ios_config->GetString("System", Settings::HKeys::init_time.c_str(), "946681277");
         try {
             Settings::values.init_time = std::stoll(time);
         } catch (...) {
@@ -392,11 +392,17 @@ void Config::ReadValues() {
     }
     ReadSetting("System", Settings::values.init_ticks_type);
     ReadSetting("System", Settings::values.init_ticks_override);
-    
+
     // Enable plugin loader by default on iOS if not explicitly set
-    ReadSetting("System", Settings::values.plugin_loader_enabled);
-    ReadSetting("System", Settings::values.allow_plugin_loader);
-    
+    if (!ios_config->HasValue("System", "plugin_loader")) {
+        Settings::values.plugin_loader_enabled.SetValue(true);
+        Settings::values.allow_plugin_loader.SetValue(true);
+        LOG_INFO(Config, "Plugin loader enabled by default on iOS");
+    } else {
+        ReadSetting("System", Settings::values.plugin_loader_enabled);
+        ReadSetting("System", Settings::values.allow_plugin_loader);
+    }
+
     ReadSetting("System", Settings::values.steps_per_hour);
     ReadSetting("System", Settings::values.apply_region_free_patch);
 
@@ -405,24 +411,24 @@ void Config::ReadValues() {
     Settings::values.camera_name[OuterRightCamera] = ios_config->GetString(
         "Camera", Settings::HKeys::camera_outer_right_name.c_str(), "ios");
     Settings::values.camera_config[OuterRightCamera] =
-        ios_config->GetString("Camera", Settings::HKeys::camera_outer_right_config.c_str(),
-                                  std::string{IOSCameraBack});
+    ios_config->GetString("Camera", Settings::HKeys::camera_outer_right_config.c_str(),
+                          std::string{IOSCameraBack});
     Settings::values.camera_flip[OuterRightCamera] =
-        ios_config->GetInteger("Camera", Settings::HKeys::camera_outer_right_flip.c_str(), 0);
+    ios_config->GetInteger("Camera", Settings::HKeys::camera_outer_right_flip.c_str(), 0);
     Settings::values.camera_name[InnerCamera] =
-        ios_config->GetString("Camera", Settings::HKeys::camera_inner_name.c_str(), "ios");
+    ios_config->GetString("Camera", Settings::HKeys::camera_inner_name.c_str(), "ios");
     Settings::values.camera_config[InnerCamera] =
-        ios_config->GetString("Camera", Settings::HKeys::camera_inner_config.c_str(),
-                                  std::string{IOSCameraFront});
+    ios_config->GetString("Camera", Settings::HKeys::camera_inner_config.c_str(),
+                          std::string{IOSCameraFront});
     Settings::values.camera_flip[InnerCamera] =
-        ios_config->GetInteger("Camera", Settings::HKeys::camera_inner_flip.c_str(), 0);
+    ios_config->GetInteger("Camera", Settings::HKeys::camera_inner_flip.c_str(), 0);
     Settings::values.camera_name[OuterLeftCamera] =
-        ios_config->GetString("Camera", Settings::HKeys::camera_outer_left_name.c_str(), "ios");
+    ios_config->GetString("Camera", Settings::HKeys::camera_outer_left_name.c_str(), "ios");
     Settings::values.camera_config[OuterLeftCamera] =
-        ios_config->GetString("Camera", Settings::HKeys::camera_outer_left_config.c_str(),
-                                  std::string{IOSCameraBack});
+    ios_config->GetString("Camera", Settings::HKeys::camera_outer_left_config.c_str(),
+                          std::string{IOSCameraBack});
     Settings::values.camera_flip[OuterLeftCamera] =
-        ios_config->GetInteger("Camera", Settings::HKeys::camera_outer_left_flip.c_str(), 0);
+    ios_config->GetInteger("Camera", Settings::HKeys::camera_outer_left_flip.c_str(), 0);
 
     // Miscellaneous
     ReadSetting("Miscellaneous", Settings::values.log_filter);
@@ -437,7 +443,7 @@ void Config::ReadValues() {
 
     // Debugging
     Settings::values.record_frame_times =
-        ios_config->GetBoolean("Debugging", Settings::HKeys::record_frame_times.c_str(), false);
+    ios_config->GetBoolean("Debugging", Settings::HKeys::record_frame_times.c_str(), false);
     ReadSetting("Debugging", Settings::values.renderer_debug);
     ReadSetting("Debugging", Settings::values.pica_debugging);
     ReadSetting("Debugging", Settings::values.use_gdbstub);
@@ -449,7 +455,7 @@ void Config::ReadValues() {
 
     for (const auto& service_module : Service::service_module_map) {
         bool use_lle =
-            ios_config->GetBoolean("Debugging", "LLE\\" + service_module.name, false);
+        ios_config->GetBoolean("Debugging", "LLE\\" + service_module.name, false);
         Settings::values.lle_modules.emplace(service_module.name, use_lle);
     }
 
@@ -467,16 +473,16 @@ void Config::Reload() {
     for (auto key = Settings::Keys::keys_array.begin(); key != Settings::Keys::keys_array.end();
          ++key) {
         const auto key_declaration_string = std::string(*key) + " =";
-        if ((std::ranges::find(DefaultINI::ios_config_omitted_keys, *key) ==
-             std::end(DefaultINI::ios_config_omitted_keys)) &&
-            (std::string(DefaultINI::ios_config_default_file_content)
-                 .find(key_declaration_string) == std::string::npos)) {
-            ASSERT_MSG(false,
-                       "Validation of default config content (ios/AzaharBridge/default_ini_ios.h) failed: Missing "
-                       "declaration for key '{}'",
-                       *key);
+    if ((std::ranges::find(DefaultINI::ios_config_omitted_keys, *key) ==
+        std::end(DefaultINI::ios_config_omitted_keys)) &&
+        (std::string(DefaultINI::ios_config_default_file_content)
+        .find(key_declaration_string) == std::string::npos)) {
+        ASSERT_MSG(false,
+                   "Validation of default config content (ios/AzaharBridge/default_ini_ios.h) failed: Missing "
+                   "declaration for key '{}'",
+                   *key);
         }
-    }
-    LoadINI(DefaultINI::ios_config_default_file_content);
-    ReadValues();
+         }
+         LoadINI(DefaultINI::ios_config_default_file_content);
+         ReadValues();
 }
