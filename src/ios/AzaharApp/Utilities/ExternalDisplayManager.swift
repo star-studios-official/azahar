@@ -98,17 +98,11 @@ class ExternalDisplayManager: ObservableObject {
         if savedMode == 0 && !UserDefaults.standard.bool(forKey: "has_set_external_display_mode") {
             // First-time external display connection - auto-set to fullscreen
             displayMode = .externalFullscreen
+            UserDefaults.standard.set(ExternalDisplayMode.externalFullscreen.rawValue, forKey: "external_display_mode")
             UserDefaults.standard.set(true, forKey: "has_set_external_display_mode")
             print("Auto-configured external display for fullscreen (ManicEMU-style)")
         } else {
             displayMode = ExternalDisplayMode(rawValue: savedMode) ?? .externalFullscreen
-        }
-            // First time connecting external display - default to fullscreen
-            displayMode = .externalFullscreen
-            UserDefaults.standard.set(ExternalDisplayMode.externalFullscreen.rawValue, forKey: "external_display_mode")
-            UserDefaults.standard.set(true, forKey: "has_set_external_display_mode")
-        } else if let mode = ExternalDisplayMode(rawValue: savedMode) {
-            displayMode = mode
         }
         
         // Create the external window if the scene delegate hasn't done it already.
