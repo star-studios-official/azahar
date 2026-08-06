@@ -154,6 +154,19 @@ struct SettingsView: View {
                 settingsSection("External Display", icon: "tv") {
                     ExternalDisplaySettingsSection()
                 }
+                
+                // Controller Settings
+                settingsSection("Controller", icon: "gamecontroller.fill") {
+                    NavigationLink {
+                        ControllerRemapperView()
+                    } label: {
+                        Label("Controller Mapping", systemImage: "gamecontroller")
+                    }
+                    
+                    Text("Customize button mappings and configure adaptive triggers for PS5 DualSense controllers")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 settingsSection("Audio", icon: "speaker.wave.2") {
                     SettingToggle(
