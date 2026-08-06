@@ -57,7 +57,7 @@ final class GamepadManager: ObservableObject {
         AppLogger.info("[GamepadManager] Setting up controller: \(controller.vendorName ?? "Unknown")")
 
         guard let extendedGamepad = controller.extendedGamepad else {
-            AppLogger.warning("[GamepadManager] No extendedGamepad profile available")
+            AppLogger.info("[GamepadManager] No extendedGamepad profile available")
             // Try micro gamepad (Apple TV Remote)
             if let microGamepad = controller.microGamepad {
                 AppLogger.info("[GamepadManager] Using microGamepad profile instead")
