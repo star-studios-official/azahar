@@ -37,6 +37,46 @@ class TouchControlSettings: ObservableObject, Codable {
         case buttonOpacity, isEditModeEnabled
     }
     
+    required init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let _faceButtonScale = try container.decode(CGFloat.self, forKey: .faceButtonScale)
+        let _dpadScale = try container.decode(CGFloat.self, forKey: .dpadScale)
+        let _triggerScale = try container.decode(CGFloat.self, forKey: .triggerScale)
+        let _joystickScale = try container.decode(CGFloat.self, forKey: .joystickScale)
+        let _centerButtonScale = try container.decode(CGFloat.self, forKey: .centerButtonScale)
+        let _landscapePositions = try container.decode([String: CGPoint].self, forKey: .landscapePositions)
+        let _portraitPositions = try container.decode([String: CGPoint].self, forKey: .portraitPositions)
+        let _buttonOpacity = try container.decode(CGFloat.self, forKey: .buttonOpacity)
+        let _isEditModeEnabled = try container.decode(Bool.self, forKey: .isEditModeEnabled)
+        
+        faceButtonScale = _faceButtonScale
+        dpadScale = _dpadScale
+        triggerScale = _triggerScale
+        joystickScale = _joystickScale
+        centerButtonScale = _centerButtonScale
+        landscapePositions = _landscapePositions
+        portraitPositions = _portraitPositions
+        buttonOpacity = _buttonOpacity
+        isEditModeEnabled = _isEditModeEnabled
+    }
+    
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(faceButtonScale, forKey: .faceButtonScale)
+        try container.encode(dpadScale, forKey: .dpadScale)
+        try container.encode(triggerScale, forKey: .triggerScale)
+        try container.encode(joystickScale, forKey: .joystickScale)
+        try container.encode(centerButtonScale, forKey: .centerButtonScale)
+        try container.encode(landscapePositions, forKey: .landscapePositions)
+        try container.encode(portraitPositions, forKey: .portraitPositions)
+        try container.encode(buttonOpacity, forKey: .buttonOpacity)
+        try container.encode(isEditModeEnabled, forKey: .isEditModeEnabled)
+    }
+    
+    init() {
+        // Default initializer for creating new instances
+    }
+    
     static func load() -> TouchControlSettings {
         guard let data = UserDefaults.standard.data(forKey: userDefaultsKey),
               let settings = try? JSONDecoder().decode(TouchControlSettings.self, from: data) else {
