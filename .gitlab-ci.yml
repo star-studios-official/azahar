@@ -1,0 +1,118 @@
+# Global defaults for all jobs
+default:
+  image: macos-27-xcode-27          # Matches your runs-on: xcode-27 requirement
+  tags:
+    - saas-macos-medium-m1          # Free tier shared macOS runner tag
+
+stages:
+  - build
+
+# Workflow rules to handle push, PR, and manual (dispatch) triggers
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "push"
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master"
+    - if: $CI_PIPELINE_SOURCE == "web" # Matches workflow_dispatch
+
+# Define your matrix cache strategies globally
+cache:
+  key: "ios-standard-${CI_COMMIT_REF_SLUG}"
+  paths:
+    - .ccache
+    - build-ios
+
+ios-build:
+  stage: build
+  variables:
+    VARIANT: "standard"
+  script:
+    # 1. Initialize submodules (replaces actions/checkout recursive submodules)
+    - git submodule update --init --recursive --force
+    - git submodule update --init --recursive externals/rcheevos/rcheevos || true
+    - |
+      if [ ! -d "externals/rcheevos/rcheevos/include" ]; then
+        echo "rcheevos submodule not properly initialized, cloning manually..."
+        cd externals/rcheevos
+        git clone https://github.com/RetroAchievements/rcheevos.git rcheevos
+        cd ../..
+      fi
+
+    # 2. Install SwiftLint
+    - brew install swiftlint
+    - swiftlint version
+
+    # 3. Run SwiftLint (Allow failure logic inline)
+    - |
+      cd src/ios
+      swiftlint lint || echo "SwiftLint found issues but continuing build..."
+      cd ../..
+
+    # 4. Configure CMake
+    - |
+      cmake -S . -B build-ios -G Xcode \
+        -DCMAKE_SYSTEM_NAME=iOS \
+        -DCMAKE_OSX_DEPLOYMENT_TARGET=18.0 \
+        -DCMAKE_OSX_ARCHITECTURES=arm64 \
+        -DENABLE_QT=OFF \
+        -DENABLE_LIBRETRO=OFF \
+        -DENABLE_TESTS=OFF \
+        -DENABLE_ROOM_STANDALONE=OFF \
+        -DENABLE_RETRO_ACHIEVEMENTS=ON
+
+    # 5. Build
+    - cmake --build build-ios --config Release -j$(sysctl -n hw.ncpu)
+
+    # 6. Run tests
+    - |
+      if [ "$VARIANT" = "standard" ]; then
+        ctest --test-dir build-ios -VV -C Release
+      fi
+
+    # 7. Create unsigned IPA
+    - |
+      APP_PATH=$(find build-ios -name "Azahar.app" -type d | head -1)
+      if [ -z "$APP_PATH" ]; then
+        echo "Error: Azahar.app not found"
+        exit 1
+      fi
+      echo "Found app bundle: $APP_PATH"
+      
+      BUNDLE_ID="org.azahar_emu.Azahar"
+      plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" "$APP_PATH/Info.plist"
+      plutil -replace CFBundleExecutable -string "Azahar" "$APP_PATH/Info.plist"
+      plutil -replace CFBundleName -string "Azahar" "$APP_PATH/Info.plist"
+      
+      echo "Compiling asset catalog..."
+      xcrun actool src/ios/AzaharApp/Resources/Assets.xcassets \
+        --compile "$APP_PATH" \
+        --platform iphoneos \
+        --minimum-deployment-target 18.0 \
+        --app-icon AppIcon \
+        --output-partial-info-plist /tmp/partial-info.plist \
+        --compress-pngs
+      
+      if [ -f "$APP_PATH/Assets.car" ]; then
+        ls -lh "$APP_PATH/Assets.car"
+      fi
+      
+      cp src/ios/AzaharApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-60@2x.png "$APP_PATH/AppIcon60x60@2x.png"
+      cp src/ios/AzaharApp/Resources/Assets.xcassets/AppIcon.appiconset/AppIcon-60@3x.png "$APP_PATH/AppIcon60x60@3x.png"
+      
+      if [ -f "src/ios/AzaharApp/Resources/Azahar.entitlements" ]; then
+        cp "src/ios/AzaharApp/Resources/Azahar.entitlements" "$APP_PATH/"
+      fi
+      
+      mkdir -p artifacts/Payload
+      cp -r "$APP_PATH" artifacts/Payload/
+      
+      cd artifacts
+      zip -r Azahar.ipa Payload
+      cd ..
+
+  # 8. Upload Artifacts (replaces actions/upload-artifact)
+  artifacts:
+    name: "ios-artifacts-${CI_COMMIT_REF_SLUG}"
+    paths:
+      - artifacts/*.ipa
+      - build-ios/**/*.dSYM
+    expire_in: 1 week
