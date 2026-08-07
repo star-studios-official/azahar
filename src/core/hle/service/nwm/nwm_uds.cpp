@@ -28,6 +28,13 @@
 #include "core/loader/loader.h"
 #include "core/memory.h"
 
+#ifdef CITRA_IOS
+// iOS MultipeerConnectivity bridge function (implemented in ios_bridge.mm)
+extern "C" {
+void az_nwm_start_hosting(const char* room_name, const char* title_id, const char* game_title);
+}
+#endif
+
 SERIALIZE_EXPORT_IMPL(Service::NWM::NWM_UDS)
 SERVICE_CONSTRUCT_IMPL(Service::NWM::NWM_UDS)
 
@@ -1052,10 +1059,9 @@ Result NWM_UDS::BeginHostingNetwork(std::span<const u8> network_info_buffer,
     char room_name[64];
     snprintf(room_name, sizeof(room_name), "Azahar_%08llX", system.Kernel().GetCurrentProcess()->codeset->program_id);
     
-    extern "C" void az_nwm_start_hosting(const char* room_name, const char* title_id, const char* game_title);
     char title_id_str[17];
     snprintf(title_id_str, sizeof(title_id_str), "%016llX", system.Kernel().GetCurrentProcess()->codeset->program_id);
-    ::az_nwm_start_hosting(room_name, title_id_str, game_title.c_str());
+    az_nwm_start_hosting(room_name, title_id_str, game_title.c_str());
     
     LOG_INFO(Service_NWM, "[LocalMP] iOS MultipeerConnectivity host started: {}", room_name);
 #endif
