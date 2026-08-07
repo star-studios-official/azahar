@@ -278,9 +278,12 @@ enum class SystemInfoMemUsageRegion {
 };
 
 enum class SystemInfoLumaCFWInformation {
+    LUMA_VERSION = 0,            // Returns Luma3DS version (emulated for compatibility)
     REAL_APP_REGION_SIZE = 0x80, // Gets the real APPLICATION region size,
                                  // instead of the one reported by the kernel shared page
                                  // which depends on the memory mode.
+    ROSALINA_MENU_COMBO = 0x101, // Returns the Rosalina menu combo (emulated)
+    PLUGIN_LOADER_FLAGS = 0x180, // Returns plugin loader enabled flags
     IS_N3DS = 0x201,             // Checks if the system is a N3DS or not.
 };
 
@@ -1845,8 +1848,21 @@ Result SVC::GetSystemInfo(s64* out, u32 type, s32 param) {
         break;
     case SystemInfoType::LUMA_CFW_INFO:
         switch ((SystemInfoLumaCFWInformation)param) {
+        case SystemInfoLumaCFWInformation::LUMA_VERSION:
+            // Return Azahar version as a fake Luma version for compatibility
+            // Format: SYSTEM_VERSION(major, minor, build)
+            *out = (13 << 24) | (0 << 16) | 0; // Report as Luma 13.0.0
+            break;
         case SystemInfoLumaCFWInformation::REAL_APP_REGION_SIZE:
             *out = kernel.GetMemoryRegion(MemoryRegion::APPLICATION)->size;
+            break;
+        case SystemInfoLumaCFWInformation::ROSALINA_MENU_COMBO:
+            // Return a default menu combo (L+Down+Select = 0x100)
+            *out = 0x100;
+            break;
+        case SystemInfoLumaCFWInformation::PLUGIN_LOADER_FLAGS:
+            // Return plugin loader enabled flag
+            *out = Settings::values.plugin_loader_enabled ? 1 : 0;
             break;
         case SystemInfoLumaCFWInformation::IS_N3DS:
             *out = Settings::values.is_new_3ds ? 1 : 0;
