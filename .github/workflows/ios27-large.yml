@@ -9,7 +9,7 @@ on:
 
 jobs:
   ios-build:
-    runs-on: xcode-27
+    runs-on: xcode-27-xlarge
     strategy:
       fail-fast: false
       matrix:
