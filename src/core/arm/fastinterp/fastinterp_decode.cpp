@@ -3164,6 +3164,23 @@ void ARM_FastInterp::DecodeThumb16(u16 inst, u32 pc, DecodedInst& out) {
                 out.opcode = Opcode::Invalid;
             return;
         }
+        // IT block and hints (format: 1011 1111 xxxx xxxx)
+        if ((inst & 0xFF00) == 0xBF00) {
+            const u8 imm8 = inst & 0xFF;
+            // IT block: 1011 1111 firstcond mask
+            // mask != 0000 means IT block, mask == 0000 means hints (NOP, YIELD, etc.)
+            if ((imm8 & 0x0F) != 0x00) {
+                // IT instruction - store the IT state to be used by following instructions
+                out.opcode = Opcode::ThumbIT;
+                out.imm32 = imm8; // Store full IT state (cond + mask)
+                return;
+            } else {
+                // Hints: NOP, YIELD, WFE, WFI, SEV
+                // For now, treat all hints as NOP
+                out.opcode = Opcode::Nop;
+                return;
+            }
+        }
         out.opcode = Opcode::Invalid;
         return;
     }

@@ -1122,3 +1122,12 @@ handle_ThumbRevsh: {
     SET_PC(GET_PC() + 2);
     DISPATCH();
 }
+
+handle_ThumbIT: {
+    // IT instruction: store IT state for conditional execution of following instructions
+    // inst->imm32 contains the full IT state (cond in bits 7-4, mask in bits 3-0)
+    state_.it_state = static_cast<u8>(inst->imm32);
+    executed += inst->ticks;
+    SET_PC(GET_PC() + 2);
+    DISPATCH();
+}

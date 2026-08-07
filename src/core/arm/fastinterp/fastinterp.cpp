@@ -471,6 +471,7 @@ u64 ARM_FastInterp::ExecuteBlock(BasicBlock* block) {
         HANDLER(ThumbRev),
         HANDLER(ThumbRev16),
         HANDLER(ThumbRevsh),
+        HANDLER(ThumbIT),
 
         // Thumb32 handlers
         HANDLER(ThumbBl),
@@ -553,6 +554,24 @@ u64 ARM_FastInterp::ExecuteBlock(BasicBlock* block) {
 #define GET_PC() local_pc
 #define SET_PC(val) (local_pc = (val))
 #define SYNC_PC() (state_.regs[15] = local_pc)
+
+// Helper to check if current instruction should execute based on IT state
+#define SHOULD_EXECUTE_IN_IT_BLOCK()                                                               \
+    (state_.it_state == 0 ||                                                                       \
+     (state_.it_state != 0 && CheckCondition(static_cast<u8>((state_.it_state >> 4) & 0xF))))
+
+// Helper to advance IT state after executing an instruction
+#define ADVANCE_IT_STATE()                                                                         \
+    do {                                                                                           \
+        if (state_.it_state != 0) {                                                                \
+            u8 mask = state_.it_state & 0x0F;                                                      \
+            if ((mask & 0x7) == 0) {                                                               \
+                state_.it_state = 0; /* Last instruction in IT block */                            \
+            } else {                                                                               \
+                state_.it_state = (state_.it_state & 0xF0) | ((mask << 1) & 0x0F);                 \
+            }                                                                                      \
+        }                                                                                          \
+    } while (0)
 
 // No bounds check: every block ends with an EndBlock terminator.
 #define DISPATCH()                                                                                 \

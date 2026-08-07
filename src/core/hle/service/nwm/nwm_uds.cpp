@@ -417,6 +417,7 @@ void NWM_UDS::StartConnectionSequence(const MacAddress& server) {
     WifiPacket auth_request;
     {
         std::scoped_lock lock(connection_status_mutex);
+        LOG_INFO(Service_NWM, "[LocalMP] StartConnectionSequence - Setting status to Connecting");
         connection_status.status = NetworkStatus::Connecting;
 
         // TODO(Subv): Handle timeout.
@@ -426,8 +427,12 @@ void NWM_UDS::StartConnectionSequence(const MacAddress& server) {
         auth_request.data = GenerateAuthenticationFrame(AuthenticationSeq::SEQ1);
         auth_request.destination_address = server;
         auth_request.type = WifiPacket::PacketType::Authentication;
+        
+        LOG_INFO(Service_NWM, "[LocalMP] Prepared authentication frame (SEQ1) for channel {}", 
+                 network_channel);
     }
 
+    LOG_INFO(Service_NWM, "[LocalMP] Sending authentication request to host");
     SendPacket(auth_request);
 }
 
@@ -554,23 +559,41 @@ void NWM_UDS::OnWifiPacketReceived(const Network::WifiPacket& packet) {
     if (!initialized) {
         return;
     }
+    
+    LOG_DEBUG(Service_NWM, "[LocalMP] Received WiFi packet - Type: {}, Channel: {}", 
+              static_cast<u32>(packet.type), packet.channel);
+    LOG_DEBUG(Service_NWM, "[LocalMP] Packet from: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}, "
+              "To: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+              packet.transmitter_address[0], packet.transmitter_address[1], 
+              packet.transmitter_address[2], packet.transmitter_address[3],
+              packet.transmitter_address[4], packet.transmitter_address[5],
+              packet.destination_address[0], packet.destination_address[1],
+              packet.destination_address[2], packet.destination_address[3],
+              packet.destination_address[4], packet.destination_address[5]);
+    
     switch (packet.type) {
     case Network::WifiPacket::PacketType::Beacon:
+        LOG_DEBUG(Service_NWM, "[LocalMP] Handling Beacon frame");
         HandleBeaconFrame(packet);
         break;
     case Network::WifiPacket::PacketType::Authentication:
+        LOG_INFO(Service_NWM, "[LocalMP] Handling Authentication frame");
         HandleAuthenticationFrame(packet);
         break;
     case Network::WifiPacket::PacketType::AssociationResponse:
+        LOG_INFO(Service_NWM, "[LocalMP] Handling Association Response frame");
         HandleAssociationResponseFrame(packet);
         break;
     case Network::WifiPacket::PacketType::Data:
+        LOG_DEBUG(Service_NWM, "[LocalMP] Handling Data frame (size: {})", packet.data.size());
         HandleDataFrame(packet);
         break;
     case Network::WifiPacket::PacketType::Deauthentication:
+        LOG_INFO(Service_NWM, "[LocalMP] Handling Deauthentication frame");
         HandleDeauthenticationFrame(packet);
         break;
     case Network::WifiPacket::PacketType::NodeMap:
+        LOG_DEBUG(Service_NWM, "[LocalMP] Handling NodeMap packet");
         HandleNodeMapPacket(packet);
         break;
     }
@@ -940,16 +963,25 @@ Result NWM_UDS::BeginHostingNetwork(std::span<const u8> network_info_buffer,
                                     std::vector<u8> passphrase) {
     // TODO(Subv): Store the passphrase and verify it when attempting a connection.
 
+    LOG_INFO(Service_NWM, "[LocalMP] BeginHostingNetwork called - Starting local multiplayer host");
+    LOG_INFO(Service_NWM, "[LocalMP] Network info size: {}, Passphrase size: {}", 
+             network_info_buffer.size(), passphrase.size());
+
     {
         std::scoped_lock lock(connection_status_mutex);
         network_info = {};
         std::memcpy(&network_info, network_info_buffer.data(), network_info_buffer.size());
+
+        LOG_INFO(Service_NWM, "[LocalMP] Max nodes: {}, Application data size: {}", 
+                 network_info.max_nodes, network_info.application_data_size);
 
         // The real UDS module throws a fatal error if this assert fails.
         ASSERT_MSG(network_info.max_nodes > 1, "Trying to host a network of only one member.");
 
         connection_status.status = NetworkStatus::ConnectedAsHost;
         connection_status.status_change_reason = NetworkStatusChangeReason::ConnectionEstablished;
+        
+        LOG_INFO(Service_NWM, "[LocalMP] Host status set to ConnectedAsHost");
 
         // Ensure the application data size is less than the maximum value.
         ASSERT_MSG(network_info.application_data_size <= ApplicationDataSize,
@@ -979,6 +1011,11 @@ Result NWM_UDS::BeginHostingNetwork(std::span<const u8> network_info_buffer,
         connection_status.changed_nodes |= 1;
 
         network_info.host_mac_address = GetMacAddress();
+        
+        LOG_INFO(Service_NWM, "[LocalMP] Host MAC address: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                 network_info.host_mac_address[0], network_info.host_mac_address[1],
+                 network_info.host_mac_address[2], network_info.host_mac_address[3],
+                 network_info.host_mac_address[4], network_info.host_mac_address[5]);
 
         node_info[0] = current_node;
 
@@ -987,6 +1024,8 @@ Result NWM_UDS::BeginHostingNetwork(std::span<const u8> network_info_buffer,
             network_channel = network_info.channel;
         else
             network_info.channel = DefaultNetworkChannel;
+            
+        LOG_INFO(Service_NWM, "[LocalMP] Using network channel: {}", network_info.channel);
     }
 
     connection_status_event->Signal();
@@ -1020,6 +1059,7 @@ Result NWM_UDS::BeginHostingNetwork(std::span<const u8> network_info_buffer,
     LOG_INFO(Service_NWM, "[LocalMP] iOS MultipeerConnectivity host started: {}", room_name);
 #endif
 
+    LOG_INFO(Service_NWM, "[LocalMP] Host network started successfully, broadcasting beacons");
     return ResultSuccess;
 }
 
@@ -1415,11 +1455,23 @@ private:
 
 void NWM_UDS::ConnectToNetworkHLE(NetworkInfo net_info, u8 connection_type,
                                   std::vector<u8> passphrase) {
+    LOG_INFO(Service_NWM, "[LocalMP] ConnectToNetwork called - Attempting to join network");
+    LOG_INFO(Service_NWM, "[LocalMP] Connection type: 0x{:02X}, Passphrase size: {}", 
+             connection_type, passphrase.size());
+    
     network_info = net_info;
+    
+    LOG_INFO(Service_NWM, "[LocalMP] Target host MAC: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+             network_info.host_mac_address[0], network_info.host_mac_address[1],
+             network_info.host_mac_address[2], network_info.host_mac_address[3],
+             network_info.host_mac_address[4], network_info.host_mac_address[5]);
+    LOG_INFO(Service_NWM, "[LocalMP] Network channel: {}, Max nodes: {}", 
+             network_info.channel, network_info.max_nodes);
 
     conn_type = static_cast<ConnectionType>(connection_type);
 
     // Start the connection sequence
+    LOG_INFO(Service_NWM, "[LocalMP] Starting connection sequence to host");
     StartConnectionSequence(network_info.host_mac_address);
 }
 
