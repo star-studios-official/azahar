@@ -522,8 +522,7 @@ private:
      *      1 : Result of function, 0 on success, otherwise error code
      *      2, 3: output buffer return descriptor & ptr
      */
-    /**
-     * NWM_UDS::DecryptBeaconData service function.
+    void DecryptBeaconData(Kernel::HLERequestContext& ctx);
 
     void CheckSpoofFriendCodeSeed(Kernel::HLERequestContext& ctx, NodeInfo& node);
 
@@ -531,7 +530,6 @@ private:
         u32 sharedmem_size, const NodeInfo& node, u16 version,
         std::shared_ptr<Kernel::SharedMemory> sharedmem);
 
-    void CheckSpoofFriendCodeSeed(Kernel::HLERequestContext& ctx, NodeInfo& node);
     void ShutdownHLE();
     Common::Expected<int, ResultStatus> PullPacketHLE(u32 bind_node_id, u32 max_out_buff_size,
                                                       u32 max_out_buff_size_aligned,
