@@ -57,7 +57,8 @@ struct EmulationView: View {
                     }
             }
             
-            // Tap detector overlay for showing hidden buttons (BELOW touch controls)
+            // Tap detector overlay for showing hidden buttons (BEHIND touch screen and controls)
+            // zIndex -1 ensures it's below TouchScreenOverlay so touches reach the 3DS screen
             if !showOverlayButtons && !viewModel.isControlsVisible {
                 Color.clear
                     .contentShape(Rectangle())
@@ -66,7 +67,7 @@ struct EmulationView: View {
                         resetOverlayButtonsTimer()
                     }
                     .allowsHitTesting(true)
-                    .zIndex(1)  // Below touch screen and controls
+                    .zIndex(-1)  // Behind everything - only catches taps that don't hit touch screen/controls
             }
             
             // Loading screen overlay

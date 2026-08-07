@@ -5,6 +5,7 @@
 import UIKit
 import SwiftUI
 import QuartzCore
+import Metal
 
 /// Manages external displays (AirPlay, HDMI, USB-C) for dual-screen 3DS emulation
 class ExternalDisplayManager: ObservableObject {
@@ -71,12 +72,65 @@ class ExternalDisplayManager: ObservableObject {
         // Monitor for external display connection/disconnection
         AppLogger.info("[ExternalDisplay] Setting up screen notifications")
         
+        // Modern iOS 13+ scene-based notifications (posted by ExternalSceneDelegate)
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("ExternalSceneConnected"),
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            AppLogger.info("[ExternalDisplay] *** EXTERNAL SCENE CONNECTED NOTIFICATION ***")
+            
+            guard let screen = notification.object as? UIScreen else {
+                AppLogger.error("ExternalDisplay", message: "Failed to cast notification object to UIScreen")
+                return
+            }
+            
+            if let window = notification.userInfo?["window"] as? UIWindow {
+                AppLogger.info("[ExternalDisplay] Received external window from scene delegate")
+                self?.externalWindow = window
+            }
+            
+            AppLogger.info("[ExternalDisplay] Connected screen via scene delegate:")
+            AppLogger.info("[ExternalDisplay]   - Bounds: \(screen.bounds)")
+            AppLogger.info("[ExternalDisplay]   - Scale: \(screen.scale)")
+            
+            self?.handleExternalDisplayConnected(screen)
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("ExternalSceneDisconnected"),
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            AppLogger.info("[ExternalDisplay] *** EXTERNAL SCENE DISCONNECTED NOTIFICATION ***")
+            self?.handleExternalDisplayDisconnected()
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("ExternalDisplayViewReady"),
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            AppLogger.info("[ExternalDisplay] *** EXTERNAL DISPLAY VIEW READY ***")
+            
+            guard let viewController = notification.object as? UIViewController else {
+                AppLogger.error("ExternalDisplay", message: "Failed to get view controller from notification")
+                return
+            }
+            
+            AppLogger.info("[ExternalDisplay] External display view is ready, bounds: \(viewController.view.bounds)")
+            
+            // Set up Metal rendering surface for external display
+            self?.setupSecondaryMetalSurface(on: viewController.view)
+        }
+        
+        // Legacy UIScreen notifications (for older iOS or non-scene based connections)
         NotificationCenter.default.addObserver(
             forName: UIScreen.didConnectNotification,
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            AppLogger.info("[ExternalDisplay] *** SCREEN CONNECTED NOTIFICATION ***")
+            AppLogger.info("[ExternalDisplay] *** SCREEN CONNECTED NOTIFICATION (LEGACY) ***")
             AppLogger.info("[ExternalDisplay] Notification object: \(String(describing: notification.object))")
             
             guard let screen = notification.object as? UIScreen else {
@@ -115,7 +169,7 @@ class ExternalDisplayManager: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            AppLogger.info("[ExternalDisplay] *** SCREEN DISCONNECTED NOTIFICATION ***")
+            AppLogger.info("[ExternalDisplay] *** SCREEN DISCONNECTED NOTIFICATION (LEGACY) ***")
             AppLogger.info("[ExternalDisplay] Notification object: \(String(describing: notification.object))")
             self?.handleExternalDisplayDisconnected()
         }
@@ -402,6 +456,44 @@ class ExternalDisplayManager: ObservableObject {
         print("  - Screen nativeScale: \(screen.nativeScale)")
         print("  - Screen nativeBounds: \(screen.nativeBounds)")
         print("  - Window frame: \(window.frame)")
+    }
+    
+    /// Set up Metal rendering surface for external display view controller
+    /// Called when ExternalDisplayViewController's view is ready
+    private func setupSecondaryMetalSurface(on view: UIView) {
+        AppLogger.info("[ExternalDisplay] Setting up secondary Metal surface")
+        AppLogger.info("[ExternalDisplay] View bounds: \(view.bounds)")
+        AppLogger.info("[ExternalDisplay] View frame: \(view.frame)")
+        
+        // The view should already have a layer - use it for Metal rendering
+        let metalLayer = CAMetalLayer()
+        metalLayer.frame = view.bounds
+        metalLayer.device = MTLCreateSystemDefaultDevice()
+        metalLayer.framebufferOnly = false
+        metalLayer.contentsScale = view.window?.screen.nativeScale ?? UIScreen.main.nativeScale
+        
+        // Add Metal layer to the view
+        view.layer.addSublayer(metalLayer)
+        
+        AppLogger.info("[ExternalDisplay] Metal layer configured:")
+        AppLogger.info("[ExternalDisplay]   - Frame: \(metalLayer.frame)")
+        AppLogger.info("[ExternalDisplay]   - Drawable size: \(metalLayer.drawableSize)")
+        AppLogger.info("[ExternalDisplay]   - Contents scale: \(metalLayer.contentsScale)")
+        
+        // Set the secondary surface in the C++ emulator core
+        let scale = metalLayer.contentsScale
+        let width = Int32(view.bounds.width * scale)
+        let height = Int32(view.bounds.height * scale)
+        
+        AppLogger.info("[ExternalDisplay] Setting secondary surface: \(width)x\(height) @ \(scale)x")
+        az_emu_secondary_surface_set(
+            metalLayer,
+            width,
+            height,
+            Float(scale)
+        )
+        
+        AppLogger.info("[ExternalDisplay] Secondary Metal surface setup complete")
     }
     
     deinit {
