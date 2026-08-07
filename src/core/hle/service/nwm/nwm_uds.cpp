@@ -1618,16 +1618,6 @@ void NWM_UDS::EjectSpectators(Kernel::HLERequestContext& ctx) {
     rb.Push(ResultSuccess);
 }
 
-void NWM_UDS::EjectSpectators(Kernel::HLERequestContext& ctx) {
-    IPC::RequestParser rp(ctx);
-
-    LOG_WARNING(Service_NWM, "(STUBBED) called");
-
-    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
-
-    rb.Push(ResultSuccess);
-}
-
 /**
  * NWM_UDS::SetMaxSendDelay service function.
  * Sets the maximum send delay for packets.
@@ -1676,7 +1666,7 @@ void NWM_UDS::Flush(Kernel::HLERequestContext& ctx) {
  *      1 : Result of function, 0 on success, otherwise error code
  */
 void NWM_UDS::SetProbeResponseParam(Kernel::HLERequestContext& ctx) {
-    IPC::RequestParser rp(ctx, 0x21, 2, 0);
+    IPC::RequestParser rp(ctx);
     u32 param1 = rp.Pop<u32>();
     u32 param2 = rp.Pop<u32>();
 
