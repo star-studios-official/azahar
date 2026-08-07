@@ -561,39 +561,98 @@ struct ExternalDisplayModeMenu: View {
 struct TouchScreenOverlay: View {
     @ObservedObject var viewModel: EmulationViewModel
     let geometry: GeometryProxy
+    @State private var touchIndicator: CGPoint?
+    @State private var touchIndicatorTimer: Timer?
     
     var body: some View {
-        Color.clear
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        handleTouch(at: value.location, pressed: true)
-                    }
-                    .onEnded { value in
-                        handleTouch(at: value.location, pressed: false)
-                        az_touch_event(0, 0, false)
-                    }
-            )
+        ZStack {
+            // Full-screen touch capture
+            Color.clear
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            handleTouch(at: value.location, pressed: true)
+                            showTouchIndicator(at: value.location)
+                        }
+                        .onEnded { value in
+                            handleTouch(at: value.location, pressed: false)
+                            az_touch_event(0, 0, false)
+                            hideTouchIndicator()
+                        }
+                )
+            
+            // Visual touch indicator (small circle that follows your finger)
+            if let position = touchIndicator {
+                Circle()
+                    .fill(Color.white.opacity(0.5))
+                    .frame(width: 30, height: 30)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.blue, lineWidth: 2)
+                    )
+                    .position(position)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
     }
     
     private func handleTouch(at location: CGPoint, pressed: Bool) {
-        // Convert screen coordinates to framebuffer coordinates (pixels)
-        // The Metal layer drawableSize is in pixels (bounds * scale)
+        // Get the actual screen bounds and scale
         let scale = UIScreen.main.scale
+        let screenWidth = geometry.size.width
+        let screenHeight = geometry.size.height
+        
+        // Calculate framebuffer pixel coordinates
+        // The Metal drawable uses pixel coordinates (points * scale)
         let pixelX = Float(location.x * scale)
         let pixelY = Float(location.y * scale)
         
-        // Log touch events for debugging
-        AppLogger.debug("[TouchScreenOverlay] Touch \(pressed ? "DOWN" : "UP") at screen coords: (\(location.x), \(location.y)), pixel coords: (\(pixelX), \(pixelY)), scale: \(scale)")
-        AppLogger.debug("[TouchScreenOverlay] Geometry size: \(geometry.size.width)x\(geometry.size.height)")
+        // Determine if we're in landscape or portrait
+        let isLandscape = screenWidth > screenHeight
         
-        // Send to emulator - the C++ side will map to 3DS bottom screen coordinates
+        // Log detailed touch information
+        if pressed {
+            AppLogger.debug("[TouchScreenOverlay] Touch DOWN:")
+            AppLogger.debug("  Screen coords: (\(location.x), \(location.y))")
+            AppLogger.debug("  Pixel coords: (\(pixelX), \(pixelY))")
+            AppLogger.debug("  Screen size: \(screenWidth)x\(screenHeight)")
+            AppLogger.debug("  Scale: \(scale)")
+            AppLogger.debug("  Orientation: \(isLandscape ? "Landscape" : "Portrait")")
+        }
+        
+        // Send to emulator - the C++ side will:
+        // 1. Check if coordinates are within bottom_screen bounds
+        // 2. Map to 3DS touch coordinates (0-320 x 0-240)
         let result = az_touch_event(pixelX, pixelY, pressed)
-        AppLogger.debug("[TouchScreenOverlay] az_touch_event returned: \(result)")
+        
+        if !result && pressed {
+            AppLogger.debug("[TouchScreenOverlay] Touch rejected - outside bottom screen area")
+        }
         
         if pressed {
             az_touch_moved(pixelX, pixelY)
         }
+    }
+    
+    private func showTouchIndicator(at position: CGPoint) {
+        withAnimation(.easeInOut(duration: 0.1)) {
+            touchIndicator = position
+        }
+        
+        // Auto-hide after 2 seconds of inactivity
+        touchIndicatorTimer?.invalidate()
+        touchIndicatorTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
+            hideTouchIndicator()
+        }
+    }
+    
+    private func hideTouchIndicator() {
+        withAnimation(.easeOut(duration: 0.2)) {
+            touchIndicator = nil
+        }
+        touchIndicatorTimer?.invalidate()
+        touchIndicatorTimer = nil
     }
 }
