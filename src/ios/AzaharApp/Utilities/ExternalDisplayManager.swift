@@ -364,13 +364,15 @@ final class ExternalMetalUIView: UIView {
         metalLayer.framebufferOnly = true
         
         // Use external screen's native scale and full bounds
-        guard let window = window, let screen = window.screen else {
+        guard let window = window else {
             // Fallback to main screen if window not yet assigned
             metalLayer.contentsScale = UIScreen.main.scale
             metalLayer.drawableSize = CGSize(width: bounds.size.width * UIScreen.main.scale, 
                                              height: bounds.size.height * UIScreen.main.scale)
             return
         }
+        
+        let screen = window.screen
         
         // Use the external screen's native scale for full resolution
         let scale = screen.nativeScale
@@ -390,9 +392,11 @@ final class ExternalMetalUIView: UIView {
         // Ensure the layer fills the entire view bounds
         metalLayer.frame = bounds
         
-        guard let window = window, let screen = window.screen else {
+        guard let window = window else {
             return
         }
+        
+        let screen = window.screen
         
         // Use native scale for maximum resolution
         let scale = screen.nativeScale

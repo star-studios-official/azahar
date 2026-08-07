@@ -78,6 +78,7 @@ set(AZAHAR_SWIFT_SOURCES
     AzaharApp/Views/TouchControlsView.swift
     AzaharApp/Views/AmiiboFilePicker.swift
     AzaharApp/Views/SaveStateDialog.swift
+    AzaharApp/Views/ControllerRemapperView.swift
     AzaharApp/Views/Settings/SettingsView.swift
     AzaharApp/Views/Settings/SystemInfoView.swift
     AzaharApp/Views/Settings/JITSettingsView.swift
