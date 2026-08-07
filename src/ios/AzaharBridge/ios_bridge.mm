@@ -1864,6 +1864,9 @@ static void* g_multipeer_manager = nullptr;
 static std::queue<std::vector<u8>> g_nwm_received_packets;
 static std::mutex g_nwm_packet_mutex;
 
+// MultipeerConnectivity bridge functions (C linkage for cross-language calls)
+extern "C" {
+
 // Initialize MultipeerConnectivity manager
 void az_nwm_init_multipeer() {
     if (g_multipeer_manager == nullptr) {
@@ -1993,6 +1996,8 @@ void* az_nwm_pull_packet() {
     
     return static_cast<void*>(&packet_buffer);
 }
+
+} // extern "C"
 
 // ---------------------------------------------------------------------------
 // Callbacks from Swift to C++
