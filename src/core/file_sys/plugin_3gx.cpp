@@ -141,7 +141,15 @@ Loader::ResultStatus FileSys::Plugin3GXLoader::Load(
     }
 
     if (Settings::values.log_3gx_plugin.GetValue()) {
-        LOG_INFO(Service_PLGLDR, "[3GX] Compatible TIDs: {}", compatible_TID);
+        // Format compatible TIDs as comma-separated hex values
+        std::string tid_list;
+        for (size_t i = 0; i < compatible_TID.size(); i++) {
+            tid_list += fmt::format("{:08X}", compatible_TID[i]);
+            if (i < compatible_TID.size() - 1) {
+                tid_list += ", ";
+            }
+        }
+        LOG_INFO(Service_PLGLDR, "[3GX] Compatible TIDs: [{}]", tid_list);
         LOG_INFO(Service_PLGLDR, "[3GX] Current program ID: {:08X}", static_cast<u32>(process.codeset->program_id));
     }
 
