@@ -13,6 +13,9 @@ struct TouchControlsView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @State private var draggedButton: String?
     @State private var dragOffset: CGSize = .zero
+    @State private var controlsOpacity: Double = 1.0
+    @State private var lastTouchTime: Date = Date()
+    @State private var hideTimer: Timer?
 
     var body: some View {
         GeometryReader { geometry in
@@ -40,6 +43,7 @@ struct TouchControlsView: View {
                             joystickSize: joystickSize,
                             centerButtonSize: centerButtonSize
                         )
+                        .opacity(settings.isEditModeEnabled ? 1.0 : controlsOpacity)
                     } else {
                         portraitControls(
                             width: w,
@@ -50,6 +54,7 @@ struct TouchControlsView: View {
                             joystickSize: joystickSize,
                             centerButtonSize: centerButtonSize
                         )
+                        .opacity(settings.isEditModeEnabled ? 1.0 : controlsOpacity)
                     }
                 }
                 
@@ -74,9 +79,51 @@ struct TouchControlsView: View {
                 if settings.isEditModeEnabled {
                     editModeOverlay(geometry: geometry)
                 }
+                
+                // Invisible touch detector for auto-hide functionality
+                Color.clear
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { _ in
+                                handleUserTouch()
+                            }
+                    )
+                    .allowsHitTesting(true)
             }
         }
         .allowsHitTesting(viewModel.isControlsVisible || settings.isEditModeEnabled)
+        .onAppear {
+            startAutoHideTimer()
+        }
+        .onDisappear {
+            stopAutoHideTimer()
+        }
+    }
+    
+    private func handleUserTouch() {
+        lastTouchTime = Date()
+        withAnimation(.easeIn(duration: 0.2)) {
+            controlsOpacity = 1.0
+        }
+        startAutoHideTimer()
+    }
+    
+    private func startAutoHideTimer() {
+        stopAutoHideTimer()
+        hideTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            let timeSinceLastTouch = Date().timeIntervalSince(lastTouchTime)
+            if timeSinceLastTouch > 10.0 {
+                withAnimation(.easeOut(duration: 1.0)) {
+                    controlsOpacity = 0.2
+                }
+            }
+        }
+    }
+    
+    private func stopAutoHideTimer() {
+        hideTimer?.invalidate()
+        hideTimer = nil
     }
     
     private func landscapeControls(

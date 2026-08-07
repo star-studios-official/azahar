@@ -120,6 +120,105 @@ struct SettingsView: View {
                         group: "Renderer", key: "async_shader_compilation"
                     )
                 }
+                
+                // GPU Performance Options
+                settingsSection("GPU Performance", icon: "cpu.fill") {
+                    Text("Unlock full GPU power - enable these for maximum performance on powerful devices")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.vertical, 4)
+                    
+                    SettingToggle(
+                        title: "High Performance Mode",
+                        description: "Use maximum GPU clock speeds for best performance",
+                        group: "Renderer", key: "gpu_high_performance"
+                    )
+                    
+                    SettingToggle(
+                        title: "Aggressive Texture Caching",
+                        description: "Cache more textures in VRAM for faster rendering",
+                        group: "Renderer", key: "aggressive_texture_cache"
+                    )
+                    
+                    SettingToggle(
+                        title: "Parallel Shader Compilation",
+                        description: "Use multiple CPU cores to compile shaders faster",
+                        group: "Renderer", key: "parallel_shader_compile"
+                    )
+                    
+                    SettingToggle(
+                        title: "Optimize Draw Calls",
+                        description: "Batch rendering operations for better GPU utilization",
+                        group: "Renderer", key: "optimize_draw_calls"
+                    )
+                    
+                    SettingToggle(
+                        title: "Metal Triple Buffering",
+                        description: "Use triple buffering for smoother frame pacing (iOS)",
+                        group: "Renderer", key: "metal_triple_buffering"
+                    )
+                    
+                    SettingToggle(
+                        title: "Async Texture Upload",
+                        description: "Upload textures to GPU asynchronously to reduce stalls",
+                        group: "Renderer", key: "async_texture_upload"
+                    )
+                    
+                    Text("⚠️ These options may increase battery drain and heat generation")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .padding(.top, 4)
+                }
+                
+                // CPU Performance Options
+                settingsSection("CPU Performance", icon: "cpu") {
+                    Text("Increase CPU utilization for better emulation performance")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.vertical, 4)
+                    
+                    SettingToggle(
+                        title: "High Performance CPU Mode",
+                        description: "Run CPU at maximum frequency (may increase heat/battery drain)",
+                        group: "Core", key: "cpu_high_performance"
+                    )
+                    
+                    SettingToggle(
+                        title: "Enable CPU JIT Compiler",
+                        description: "Just-In-Time compilation for faster CPU emulation (requires StikDebug or development signing)",
+                        group: "Core", key: "use_cpu_jit"
+                    )
+                    
+                    SettingToggle(
+                        title: "Fast Interpreter",
+                        description: "Optimized cached interpreter. Disable to use legacy interpreter (slower)",
+                        group: "Core", key: "use_fastinterp"
+                    )
+                    
+                    SettingToggle(
+                        title: "Multi-threaded CPU Emulation",
+                        description: "Run CPU emulation on background thread for smoother performance",
+                        group: "Core", key: "multithreaded_cpu"
+                    )
+                    
+                    SettingSlider(
+                        title: "CPU Clock Percentage",
+                        description: "Underclock/overclock the emulated CPU. 100% = native speed. Lower = better performance, Higher = fix lag",
+                        group: "Core", key: "cpu_clock_percentage",
+                        range: 25...400, step: 5
+                    )
+                    
+                    SettingToggle(
+                        title: "Deterministic Async Operations",
+                        description: "Ensure consistent timing for async operations (may reduce performance)",
+                        group: "Core", key: "deterministic_async_operations"
+                    )
+                    
+                    Text("⚠️ High CPU settings may increase battery drain, heat, and reduce device stability")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .padding(.top, 4)
+                }
 
                 settingsSection("Layout", icon: "rectangle.split.2x2") {
                     SettingPicker(
@@ -153,6 +252,59 @@ struct SettingsView: View {
                 // External Display (AirPlay/HDMI)
                 settingsSection("External Display", icon: "tv") {
                     ExternalDisplaySettingsSection()
+                    
+                    Divider().background(Color.white.opacity(0.3))
+                    
+                    // Display mode picker
+                    Picker("Display Mode", selection: Binding(
+                        get: { ExternalDisplayManager.shared.displayMode },
+                        set: { ExternalDisplayManager.shared.setDisplayMode($0) }
+                    )) {
+                        ForEach(ExternalDisplayManager.ExternalDisplayMode.allCases, id: \.self) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    
+                    // Current mode description
+                    Text(ExternalDisplayManager.shared.displayMode.description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 4)
+                    
+                    // Connection status
+                    HStack {
+                        Image(systemName: ExternalDisplayManager.shared.isExternalDisplayConnected ? "tv.fill" : "tv.slash")
+                            .foregroundStyle(ExternalDisplayManager.shared.isExternalDisplayConnected ? .green : .secondary)
+                        Text(ExternalDisplayManager.shared.isExternalDisplayConnected ? "External Display Connected" : "No External Display Connected")
+                            .foregroundStyle(ExternalDisplayManager.shared.isExternalDisplayConnected ? .primary : .secondary)
+                        Spacer()
+                        if ExternalDisplayManager.shared.isExternalDisplayConnected {
+                            Text(ExternalDisplayManager.shared.externalScreen?.bounds.description ?? "")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                    
+                    // Resolution info
+                    if ExternalDisplayManager.shared.isExternalDisplayConnected,
+                       let screen = ExternalDisplayManager.shared.externalScreen {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("External Display Resolution:")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("\(Int(screen.bounds.width)) × \(Int(screen.bounds.height)) @ \(screen.scale)x scale (native: \(screen.nativeScale)x)")
+                                .font(.caption)
+                                .foregroundStyle(.primary)
+                            if let mode = screen.currentMode {
+                                Text("Mode: \(Int(mode.size.width)) × \(Int(mode.size.height))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
                 }
                 
                 // Controller Settings
@@ -318,6 +470,31 @@ struct SettingsView: View {
                         title: "Log Stack Traces",
                         description: "Include stack traces in crash reports",
                         group: "Debugging", key: "log_stack_trace"
+                    )
+                    
+                    // Category-specific logging options
+                    SettingToggle(
+                        title: "External Display Logging",
+                        description: "Log HDMI/AirPlay connection events and diagnostics to separate log file",
+                        group: "Debugging", key: "external_display_logging"
+                    )
+                    
+                    SettingToggle(
+                        title: "GPU Performance Logging",
+                        description: "Log GPU rendering stats and performance metrics",
+                        group: "Debugging", key: "gpu_logging"
+                    )
+                    
+                    SettingToggle(
+                        title: "3GX Plugin Logging",
+                        description: "Log 3GX plugin loading and execution events",
+                        group: "Debugging", key: "3gx_logging"
+                    )
+                    
+                    SettingToggle(
+                        title: "Controller Input Logging",
+                        description: "Log controller button presses and touchpad events",
+                        group: "Debugging", key: "controller_logging"
                     )
                     
                     Text("Experimental Logging captures every UI interaction and navigation event. Game operations and errors are always logged. Debug/Trace levels capture ALL log categories.")
@@ -574,33 +751,50 @@ struct ExternalDisplaySettingsSection: View {
             HStack {
                 Image(systemName: displayManager.isExternalDisplayConnected ? "tv.fill" : "tv")
                     .foregroundStyle(displayManager.isExternalDisplayConnected ? .green : .secondary)
-                Text(displayManager.isExternalDisplayConnected ? "External Display Connected" : "No External Display")
+                Text(displayManager.isExternalDisplayConnected ? "External Display Connected" : "No External Display (Settings Available)")
                     .foregroundStyle(displayManager.isExternalDisplayConnected ? .primary : .secondary)
             }
             .font(.subheadline)
             .padding(.vertical, 4)
             
-            if displayManager.isExternalDisplayConnected {
-                // Display mode picker
-                Picker("Display Mode", selection: Binding(
-                    get: { displayManager.displayMode },
-                    set: { displayManager.setDisplayMode($0) }
-                )) {
-                    ForEach(ExternalDisplayManager.ExternalDisplayMode.allCases, id: \.self) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
+            // Display mode picker - ALWAYS AVAILABLE
+            Picker("Display Mode", selection: Binding(
+                get: { displayManager.displayMode },
+                set: { displayManager.setDisplayMode($0) }
+            )) {
+                ForEach(ExternalDisplayManager.ExternalDisplayMode.allCases, id: \.self) { mode in
+                    Text(mode.displayName).tag(mode)
                 }
-                .pickerStyle(.menu)
-                
-                // Description of current mode
-                Text(displayManager.displayMode.description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            }
+            .pickerStyle(.menu)
+            
+            // Description of current mode
+            Text(displayManager.displayMode.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 4)
+            
+            if displayManager.isExternalDisplayConnected {
+                if let screen = displayManager.externalScreen {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("External Display Resolution:")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("\(Int(screen.bounds.width)) × \(Int(screen.bounds.height)) @ \(screen.scale)x scale (native: \(screen.nativeScale)x)")
+                            .font(.caption)
+                            .foregroundStyle(.primary)
+                        if let mode = screen.currentMode {
+                            Text("Mode: \(Int(mode.size.width)) × \(Int(mode.size.height))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                     .padding(.vertical, 4)
+                }
             } else {
-                Text("Connect via AirPlay, HDMI, or USB-C to use an external display")
+                Text("Settings will apply when external display is connected via AirPlay, HDMI, or USB-C")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.blue)
                     .padding(.vertical, 4)
             }
         }

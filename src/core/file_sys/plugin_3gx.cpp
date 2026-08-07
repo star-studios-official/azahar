@@ -27,6 +27,7 @@
 #include "core/hle/kernel/config_mem.h"
 #include "core/hle/kernel/vm_manager.h"
 #include "core/loader/loader.h"
+#include "common/settings.h"
 
 static std::string ReadTextInfo(FileUtil::IOFile& file, std::size_t offset, std::size_t max_size) {
     if (offset == 0 || max_size == 0 ||
@@ -106,6 +107,14 @@ Loader::ResultStatus FileSys::Plugin3GXLoader::Load(
         ReadTextInfo(file, header.infos.description_msg_offset, header.infos.description_len);
     summary = ReadTextInfo(file, header.infos.summary_msg_offset, header.infos.summary_len);
 
+    // Log plugin info if 3GX logging is enabled
+    if (Settings::values.log_3gx_plugin.GetValue()) {
+        LOG_INFO(Service_PLGLDR, "[3GX] Plugin info - Title: {} - Author: {} - Description: {} - Summary: {}",
+                 title, author, description, summary);
+        LOG_INFO(Service_PLGLDR, "[3GX] Plugin path: {}", plg_context.plugin_path);
+        LOG_INFO(Service_PLGLDR, "[3GX] Plugin is_default_path: {}", plg_context.is_default_path);
+    }
+
     LOG_INFO(Service_PLGLDR, "Trying to load plugin - Title: {} - Author: {}", title, author);
 
     // Load compatible TIDs
@@ -129,6 +138,11 @@ Loader::ResultStatus FileSys::Plugin3GXLoader::Load(
                   "Failed to load 3GX plugin. Not compatible with loaded process: {}",
                   plg_context.plugin_path);
         return Loader::ResultStatus::Error;
+    }
+
+    if (Settings::values.log_3gx_plugin.GetValue()) {
+        LOG_INFO(Service_PLGLDR, "[3GX] Compatible TIDs: {}", compatible_TID);
+        LOG_INFO(Service_PLGLDR, "[3GX] Current program ID: {:08X}", static_cast<u32>(process.codeset->program_id));
     }
 
     // Load exe load func and args

@@ -51,18 +51,62 @@ class ExternalDisplayManager: ObservableObject {
     }
     
     private init() {
+        // Log initialization
+        AppLogger.info("[ExternalDisplay] Initializing ExternalDisplayManager")
+        AppLogger.info("[ExternalDisplay] Current screens count: \(UIScreen.screens.count)")
+        
+        // Log all available screens
+        for (index, screen) in UIScreen.screens.enumerated() {
+            AppLogger.info("[ExternalDisplay] Screen[\(index)]: bounds=\(screen.bounds), scale=\(screen.scale), nativeScale=\(screen.nativeScale)")
+            if #available(iOS 13.0, *) {
+                AppLogger.info("[ExternalDisplay] Screen[\(index)]: mirroredScreen=\(screen.mirroredScreen != nil)")
+            }
+        }
+        
         setupScreenNotifications()
         checkForExternalDisplay()
     }
     
     private func setupScreenNotifications() {
         // Monitor for external display connection/disconnection
+        AppLogger.info("[ExternalDisplay] Setting up screen notifications")
+        
         NotificationCenter.default.addObserver(
             forName: UIScreen.didConnectNotification,
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let screen = notification.object as? UIScreen else { return }
+            AppLogger.info("[ExternalDisplay] *** SCREEN CONNECTED NOTIFICATION ***")
+            AppLogger.info("[ExternalDisplay] Notification object: \(String(describing: notification.object))")
+            
+            guard let screen = notification.object as? UIScreen else {
+                AppLogger.error("ExternalDisplay", message: "Failed to cast notification object to UIScreen")
+                return
+            }
+            
+            AppLogger.info("[ExternalDisplay] Connected screen details:")
+            AppLogger.info("[ExternalDisplay]   - Bounds: \(screen.bounds)")
+            AppLogger.info("[ExternalDisplay]   - Scale: \(screen.scale)")
+            AppLogger.info("[ExternalDisplay]   - Native scale: \(screen.nativeScale)")
+            AppLogger.info("[ExternalDisplay]   - Native bounds: \(screen.nativeBounds)")
+            AppLogger.info("[ExternalDisplay]   - Current mode: \(String(describing: screen.currentMode))")
+            AppLogger.info("[ExternalDisplay]   - Available modes count: \(screen.availableModes.count)")
+            
+            for (index, mode) in screen.availableModes.enumerated() {
+                AppLogger.info("[ExternalDisplay]   - Mode[\(index)]: size=\(mode.size), pixelAspectRatio=\(mode.pixelAspectRatio)")
+            }
+            
+            if #available(iOS 13.0, *) {
+                // Log window scenes
+                let scenes = UIApplication.shared.connectedScenes
+                AppLogger.info("[ExternalDisplay] Connected scenes count: \(scenes.count)")
+                for scene in scenes {
+                    if let windowScene = scene as? UIWindowScene {
+                        AppLogger.info("[ExternalDisplay] WindowScene: screen=\(windowScene.screen.bounds), windows=\(windowScene.windows.count)")
+                    }
+                }
+            }
+            
             self?.handleExternalDisplayConnected(screen)
         }
         
@@ -70,67 +114,110 @@ class ExternalDisplayManager: ObservableObject {
             forName: UIScreen.didDisconnectNotification,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
+            AppLogger.info("[ExternalDisplay] *** SCREEN DISCONNECTED NOTIFICATION ***")
+            AppLogger.info("[ExternalDisplay] Notification object: \(String(describing: notification.object))")
             self?.handleExternalDisplayDisconnected()
         }
+        
+        AppLogger.info("[ExternalDisplay] Screen notifications setup complete")
     }
     
     private func checkForExternalDisplay() {
         // Check if there's already an external screen connected
+        AppLogger.info("[ExternalDisplay] Checking for existing external displays")
+        AppLogger.info("[ExternalDisplay] UIScreen.screens.count = \(UIScreen.screens.count)")
+        
         if UIScreen.screens.count > 1 {
-            handleExternalDisplayConnected(UIScreen.screens[1])
+            let externalScreen = UIScreen.screens[1]
+            AppLogger.info("[ExternalDisplay] Found existing external screen at index 1")
+            AppLogger.info("[ExternalDisplay] External screen bounds: \(externalScreen.bounds)")
+            AppLogger.info("[ExternalDisplay] External screen scale: \(externalScreen.scale)")
+            handleExternalDisplayConnected(externalScreen)
+        } else {
+            AppLogger.info("[ExternalDisplay] No external display detected on initialization")
         }
     }
     
     func handleExternalDisplayConnected(_ screen: UIScreen) {
-        print("External display connected: \(screen.bounds)")
+        AppLogger.info("[ExternalDisplay] ===== handleExternalDisplayConnected START =====")
+        AppLogger.info("[ExternalDisplay] Screen bounds: \(screen.bounds)")
+        AppLogger.info("[ExternalDisplay] Screen scale: \(screen.scale)")
+        AppLogger.info("[ExternalDisplay] Screen nativeScale: \(screen.nativeScale)")
+        AppLogger.info("[ExternalDisplay] Screen nativeBounds: \(screen.nativeBounds)")
         
         externalScreen = screen
         isExternalDisplayConnected = true
         
+        AppLogger.info("[ExternalDisplay] Set isExternalDisplayConnected = true")
+        
         // Set preferred display mode for best quality
         if let mode = screen.availableModes.max(by: { $0.size.width < $1.size.width }) {
+            AppLogger.info("[ExternalDisplay] Setting screen to best mode: \(mode.size.width)×\(mode.size.height)")
             screen.currentMode = mode
+            AppLogger.info("[ExternalDisplay] Screen mode set successfully")
+        } else {
+            AppLogger.warning("[ExternalDisplay] No available modes found for external screen")
         }
         
         // ManicEMU-style: Auto-detect and default to fullscreen mode
         let savedMode = UserDefaults.standard.integer(forKey: "external_display_mode")
-        if savedMode == 0 && !UserDefaults.standard.bool(forKey: "has_set_external_display_mode") {
+        let hasSetMode = UserDefaults.standard.bool(forKey: "has_set_external_display_mode")
+        
+        AppLogger.info("[ExternalDisplay] Saved display mode: \(savedMode), hasSetMode: \(hasSetMode)")
+        
+        if savedMode == 0 && !hasSetMode {
             // First-time external display connection - auto-set to fullscreen
             displayMode = .externalFullscreen
             UserDefaults.standard.set(ExternalDisplayMode.externalFullscreen.rawValue, forKey: "external_display_mode")
             UserDefaults.standard.set(true, forKey: "has_set_external_display_mode")
-            print("Auto-configured external display for fullscreen (ManicEMU-style)")
+            AppLogger.info("[ExternalDisplay] Auto-configured to fullscreen mode (first connection)")
         } else {
             displayMode = ExternalDisplayMode(rawValue: savedMode) ?? .externalFullscreen
+            AppLogger.info("[ExternalDisplay] Loaded saved mode: \(displayMode.displayName)")
         }
         
         // Create the external window if the scene delegate hasn't done it already.
-        // Idempotent: if a window already exists it just applies the display mode.
-        if externalWindow == nil {
-            setupExternalWindow(on: screen)
-        } else {
-            applyDisplayMode()
-        }
+        AppLogger.info("[ExternalDisplay] Creating/updating external window...")
+        setupExternalWindow(on: screen)
+        
+        // Apply the display mode
+        AppLogger.info("[ExternalDisplay] Applying display mode: \(displayMode.displayName)")
+        applyDisplayMode()
         
         // Notify orientation-locking controllers to re-evaluate
         NotificationCenter.default.post(name: Notification.Name("ExternalDisplayModeChanged"), object: nil)
+        AppLogger.info("[ExternalDisplay] Posted ExternalDisplayModeChanged notification")
+        
+        AppLogger.info("[ExternalDisplay] ===== handleExternalDisplayConnected END =====")
     }
     
     func handleExternalDisplayDisconnected() {
-        print("External display disconnected")
+        AppLogger.info("[ExternalDisplay] ===== handleExternalDisplayDisconnected START =====")
         
         // Clean up external window
-        externalWindow?.isHidden = true
-        externalWindow = nil
+        if let window = externalWindow {
+            AppLogger.info("[ExternalDisplay] Cleaning up external window: \(window.frame)")
+            window.isHidden = true
+            externalWindow = nil
+        } else {
+            AppLogger.info("[ExternalDisplay] No external window to clean up")
+        }
+        
         externalScreen = nil
         isExternalDisplayConnected = false
         
+        AppLogger.info("[ExternalDisplay] Set isExternalDisplayConnected = false")
+        
         // Destroy secondary surface
         az_emu_secondary_surface_destroy()
+        AppLogger.info("[ExternalDisplay] Destroyed secondary surface")
         
         // Notify orientation-locking controllers to re-evaluate
         NotificationCenter.default.post(name: Notification.Name("ExternalDisplayModeChanged"), object: nil)
+        AppLogger.info("[ExternalDisplay] Posted ExternalDisplayModeChanged notification")
+        
+        AppLogger.info("[ExternalDisplay] ===== handleExternalDisplayDisconnected END =====")
     }
     
     func setDisplayMode(_ mode: ExternalDisplayMode) {

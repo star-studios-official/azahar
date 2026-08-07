@@ -604,6 +604,15 @@ struct Values {
     Setting<u16> custom_bottom_width{640, Keys::custom_bottom_width};
     Setting<u16> custom_bottom_height{480, Keys::custom_bottom_height};
     Setting<u16> custom_second_layer_opacity{100, Keys::custom_second_layer_opacity};
+
+    // GPU Performance Options
+    Setting<bool> gpu_high_performance{false, Keys::gpu_high_performance};
+    Setting<bool> aggressive_texture_cache{false, Keys::aggressive_texture_cache};
+    Setting<bool> parallel_shader_compile{false, Keys::parallel_shader_compile};
+    Setting<bool> optimize_draw_calls{false, Keys::optimize_draw_calls};
+    Setting<bool> metal_triple_buffering{false, Keys::metal_triple_buffering};
+    Setting<bool> async_texture_upload{false, Keys::async_texture_upload};
+
     SwitchableSetting<AspectRatio> aspect_ratio{AspectRatio::Default, Keys::aspect_ratio};
     SwitchableSetting<bool> screen_top_stretch{false, Keys::screen_top_stretch};
     Setting<u16> screen_top_leftright_padding{0, Keys::screen_top_leftright_padding};
@@ -677,6 +686,10 @@ struct Values {
     Setting<bool> instant_debug_log{false, Keys::instant_debug_log};
     Setting<bool> enable_rpc_server{false, Keys::enable_rpc_server};
     Setting<bool> log_config_loading{false, Keys::log_config_loading};
+    Setting<bool> log_external_display{false, Keys::log_external_display};
+    Setting<bool> log_gpu_performance{false, Keys::log_gpu_performance};
+    Setting<bool> log_3gx_plugin{false, Keys::log_3gx_plugin};
+    Setting<bool> log_controller_input{false, Keys::log_controller_input};
     Setting<bool> toggle_unique_data_console_type{false, Keys::toggle_unique_data_console_type};
     Setting<bool> break_on_unmapped_memory_access{false, Keys::break_on_unmapped_memory_access};
 

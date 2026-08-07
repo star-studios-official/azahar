@@ -174,6 +174,11 @@ class ControllerRemapper: ObservableObject {
         loadMappings()
     }
     
+    /// Get all current mappings for iteration (used by GamepadManager)
+    var allMappings: [(ThreeDSButton, String)] {
+        return mappings.map { ($0.key, $0.value) }
+    }
+    
     func getMapping(for button: ThreeDSButton) -> String? {
         return mappings[button]
     }

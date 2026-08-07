@@ -13,6 +13,22 @@ enum AppLogger {
         UserDefaults.standard.bool(forKey: "Debugging_experimental_logging")
     }
     
+    private static var isExternalDisplayLoggingEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "Debugging_external_display_logging")
+    }
+    
+    private static var isGPULoggingEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "Debugging_gpu_logging")
+    }
+    
+    private static var is3GXLoggingEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "Debugging_3gx_logging")
+    }
+    
+    private static var isControllerLoggingEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "Debugging_controller_logging")
+    }
+    
     /// Log view lifecycle events (onAppear, onDisappear)
     static func viewLifecycle(_ viewName: String, event: String) {
         let message = "[UI] \(viewName): \(event)"
@@ -93,6 +109,51 @@ enum AppLogger {
         let msg = "[Critical] \(context): \(message)"
         print(msg)
         logToCore(msg, level: .critical)
+    }
+    
+    /// Log warning (always logged)
+    static func warning(_ context: String, message: String) {
+        let msg = "[Warning] \(context): \(message)"
+        print(msg)
+        logToCore(msg, level: .warning)
+    }
+    
+    // MARK: - Category-specific logging
+    
+    /// External display logging (HDMI/AirPlay)
+    static func externalDisplay(_ message: String) {
+        let msg = "[ExternalDisplay] \(message)"
+        print(msg)
+        if isExternalDisplayLoggingEnabled {
+            logToCore(msg, level: .info)
+        }
+    }
+    
+    /// GPU performance logging
+    static func gpu(_ message: String) {
+        let msg = "[GPU] \(message)"
+        print(msg)
+        if isGPULoggingEnabled {
+            logToCore(msg, level: .info)
+        }
+    }
+    
+    /// 3GX plugin logging
+    static func plugin3GX(_ message: String) {
+        let msg = "[3GX] \(message)"
+        print(msg)
+        if is3GXLoggingEnabled {
+            logToCore(msg, level: .info)
+        }
+    }
+    
+    /// Controller input logging
+    static func controller(_ message: String) {
+        let msg = "[Controller] \(message)"
+        print(msg)
+        if isControllerLoggingEnabled {
+            logToCore(msg, level: .info)
+        }
     }
     
     // MARK: - Private
