@@ -355,6 +355,7 @@ enum class Opcode : u16 {
     ThumbRev,   // REV Rd, Rm
     ThumbRev16, // REV16 Rd, Rm
     ThumbRevsh, // REVSH Rd, Rm
+    ThumbIT,    // IT block (If-Then)
 
     // =========================================================================
     // Thumb32 opcodes (BL, VFP, etc.)
@@ -705,6 +706,11 @@ struct InterpreterState {
 
     // Execution state
     bool thumb_mode;
+    
+    // IT (If-Then) block state for Thumb-2 conditional execution
+    // Bits 7-4: condition code, Bits 3-0: mask (shifts left after each instruction)
+    // 0x00 means not in IT block
+    u8 it_state;
 
     // Helper to get/set PC
     u32 PC() const {

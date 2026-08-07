@@ -566,21 +566,22 @@ struct TouchScreenOverlay: View {
     
     var body: some View {
         ZStack {
-            // Full-screen touch capture
-            Color.clear
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            handleTouch(at: value.location, pressed: true)
-                            showTouchIndicator(at: value.location)
-                        }
-                        .onEnded { value in
-                            handleTouch(at: value.location, pressed: false)
-                            az_touch_event(0, 0, false)
-                            hideTouchIndicator()
-                        }
-                )
+            // Use UIKit-based touch handling for reliable tap and drag detection
+            TouchRepresentable(
+                onTouchBegan: { location in
+                    handleTouch(at: location, pressed: true)
+                    showTouchIndicator(at: location)
+                },
+                onTouchMoved: { location in
+                    handleTouch(at: location, pressed: true)
+                    showTouchIndicator(at: location)
+                },
+                onTouchEnded: { location in
+                    handleTouch(at: location, pressed: false)
+                    az_touch_event(0, 0, false)
+                    hideTouchIndicator()
+                }
+            )
             
             // Visual touch indicator (small circle that follows your finger)
             if let position = touchIndicator {
@@ -654,5 +655,59 @@ struct TouchScreenOverlay: View {
         }
         touchIndicatorTimer?.invalidate()
         touchIndicatorTimer = nil
+    }
+}
+
+/// UIKit-based touch handler for reliable touch detection
+/// SwiftUI's DragGesture can be unreliable for quick taps
+struct TouchRepresentable: UIViewRepresentable {
+    let onTouchBegan: (CGPoint) -> Void
+    let onTouchMoved: (CGPoint) -> Void
+    let onTouchEnded: (CGPoint) -> Void
+    
+    func makeUIView(context: Context) -> TouchView {
+        let view = TouchView()
+        view.backgroundColor = .clear
+        view.onTouchBegan = onTouchBegan
+        view.onTouchMoved = onTouchMoved
+        view.onTouchEnded = onTouchEnded
+        return view
+    }
+    
+    func updateUIView(_ uiView: TouchView, context: Context) {
+        uiView.onTouchBegan = onTouchBegan
+        uiView.onTouchMoved = onTouchMoved
+        uiView.onTouchEnded = onTouchEnded
+    }
+}
+
+/// UIView subclass that handles touch events directly
+class TouchView: UIView {
+    var onTouchBegan: ((CGPoint) -> Void)?
+    var onTouchMoved: ((CGPoint) -> Void)?
+    var onTouchEnded: ((CGPoint) -> Void)?
+    
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first else { return }
+        let location = touch.location(in: self)
+        onTouchBegan?(location)
+    }
+    
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first else { return }
+        let location = touch.location(in: self)
+        onTouchMoved?(location)
+    }
+    
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first else { return }
+        let location = touch.location(in: self)
+        onTouchEnded?(location)
+    }
+    
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let touch = touches.first else { return }
+        let location = touch.location(in: self)
+        onTouchEnded?(location)
     }
 }
