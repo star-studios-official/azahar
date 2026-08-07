@@ -264,17 +264,40 @@ struct GameListView: View {
             }
             defer { url.stopAccessingSecurityScopedResource() }
 
-            isInstallingCIA = true
-            DispatchQueue.global(qos: .userInitiated).async {
-                let result = az_install_cia(url.path)
-                DispatchQueue.main.async {
-                    isInstallingCIA = false
-                    installMessage = result == 0
-                        ? "CIA installed successfully!"
-                        : "Failed to install CIA. Error code: \(result)"
-                    showInstallResult = true
-                    appState.scanGames()
+            // Copy the CIA file to a temporary location within app's sandbox
+            // This is necessary because File Provider paths may not be accessible
+            // after the security scoped resource is released
+            let tempDir = FileManager.default.temporaryDirectory
+            let tempURL = tempDir.appendingPathComponent(url.lastPathComponent)
+            
+            do {
+                // Remove existing temp file if it exists
+                if FileManager.default.fileExists(atPath: tempURL.path) {
+                    try FileManager.default.removeItem(at: tempURL)
                 }
+                
+                // Copy the file to temp location
+                try FileManager.default.copyItem(at: url, to: tempURL)
+                
+                isInstallingCIA = true
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let result = az_install_cia(tempURL.path)
+                    
+                    // Clean up temp file after installation
+                    try? FileManager.default.removeItem(at: tempURL)
+                    
+                    DispatchQueue.main.async {
+                        isInstallingCIA = false
+                        installMessage = result == 0
+                            ? "CIA installed successfully!"
+                            : "Failed to install CIA. Error code: \(result)"
+                        showInstallResult = true
+                        appState.scanGames()
+                    }
+                }
+            } catch {
+                installMessage = "Failed to copy CIA file: \(error.localizedDescription)"
+                showInstallResult = true
             }
 
         case .failure(let error):

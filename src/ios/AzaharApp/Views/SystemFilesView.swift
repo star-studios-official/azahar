@@ -274,23 +274,45 @@ struct SystemFilesView: View {
             }
             defer { url.stopAccessingSecurityScopedResource() }
             
-            isInstalling = true
-            installProgress = 0
+            // Copy the CIA file to a temporary location within app's sandbox
+            // This is necessary because File Provider paths may not be accessible
+            // after the security scoped resource is released
+            let tempDir = FileManager.default.temporaryDirectory
+            let tempURL = tempDir.appendingPathComponent(url.lastPathComponent)
             
-            DispatchQueue.global(qos: .userInitiated).async {
-                let result = az_install_cia(url.path)
-                
-                DispatchQueue.main.async {
-                    isInstalling = false
-                    
-                    if result == 0 {
-                        alertMessage = "System file installed successfully!"
-                        checkSystemStatus()
-                    } else {
-                        alertMessage = "Failed to install system file. Error code: \(result)"
-                    }
-                    showingAlert = true
+            do {
+                // Remove existing temp file if it exists
+                if FileManager.default.fileExists(atPath: tempURL.path) {
+                    try FileManager.default.removeItem(at: tempURL)
                 }
+                
+                // Copy the file to temp location
+                try FileManager.default.copyItem(at: url, to: tempURL)
+                
+                isInstalling = true
+                installProgress = 0
+                
+                DispatchQueue.global(qos: .userInitiated).async {
+                    let result = az_install_cia(tempURL.path)
+                    
+                    // Clean up temp file after installation
+                    try? FileManager.default.removeItem(at: tempURL)
+                    
+                    DispatchQueue.main.async {
+                        isInstalling = false
+                        
+                        if result == 0 {
+                            alertMessage = "System file installed successfully!"
+                            checkSystemStatus()
+                        } else {
+                            alertMessage = "Failed to install system file. Error code: \(result)"
+                        }
+                        showingAlert = true
+                    }
+                }
+            } catch {
+                alertMessage = "Failed to copy CIA file: \(error.localizedDescription)"
+                showingAlert = true
             }
             
         case .failure(let error):
