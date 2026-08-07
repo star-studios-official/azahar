@@ -426,6 +426,31 @@ struct SettingsView: View {
                     SettingToggle(title: "Dump Textures", group: "Utility", key: "dump_textures")
                 }
 
+                // 3GX Plugin System
+                settingsSection("3GX Plugins", icon: "puzzlepiece.extension") {
+                    Text("Load game modification plugins from SD card")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.vertical, 4)
+                    
+                    SettingToggle(
+                        title: "Enable Plugin Loader",
+                        description: "Allow loading of .3gx plugin files from SD:/luma/plugins/",
+                        group: "System", key: "plugin_loader"
+                    )
+                    
+                    SettingToggle(
+                        title: "Allow Games to Control Plugins",
+                        description: "Let games enable/disable the plugin loader at runtime",
+                        group: "System", key: "allow_plugin_loader"
+                    )
+                    
+                    Text("⚠️ Place .3gx plugin files in: Documents/3DS/luma/plugins/{TitleID}/")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .padding(.top, 4)
+                }
+
                 settingsSection("Debugging", icon: "ant") {
                     NavigationLink {
                         LogViewerView()

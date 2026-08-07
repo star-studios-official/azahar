@@ -55,18 +55,13 @@ struct EmulationView: View {
                             TouchControlsView(viewModel: viewModel)
                         }
                     }
-            }
-            
-            // Tap detector overlay for showing hidden buttons (BELOW touch controls)
-            if !showOverlayButtons && !viewModel.isControlsVisible {
-                Color.clear
-                    .contentShape(Rectangle())
                     .onTapGesture {
-                        showOverlayButtons = true
-                        resetOverlayButtonsTimer()
+                        // Tap anywhere to show overlay buttons
+                        if !viewModel.isControlsVisible {
+                            showOverlayButtons = true
+                            resetOverlayButtonsTimer()
+                        }
                     }
-                    .allowsHitTesting(true)
-                    .zIndex(1)  // Below touch screen and controls
             }
             
             // Loading screen overlay
@@ -180,12 +175,6 @@ struct EmulationView: View {
         .onAppear {
             AppLogger.info("[EmulationView] onAppear - starting emulation")
             
-            // Keep screen awake during emulation
-            UIApplication.shared.isIdleTimerDisabled = true
-            
-            // Start overlay button auto-hide timer
-            resetOverlayButtonsTimer()
-            
             // Set up orientation observer
             orientationObserver = NotificationCenter.default.addObserver(
                 forName: UIDevice.orientationDidChangeNotification,
@@ -209,37 +198,11 @@ struct EmulationView: View {
         }
         .onDisappear {
             AppLogger.info("[EmulationView] onDisappear - stopping emulation")
-            
-            // Re-enable screen sleep when leaving emulation
-            UIApplication.shared.isIdleTimerDisabled = false
-            
-            // Clean up timer
-            overlayButtonsTimer?.invalidate()
-            overlayButtonsTimer = nil
-            
             if let observer = orientationObserver {
                 NotificationCenter.default.removeObserver(observer)
                 orientationObserver = nil
             }
             viewModel.stop()
-        }
-    }
-    
-    // MARK: - Helper Functions
-    
-    /// Reset overlay buttons auto-hide timer
-    /// Buttons hide after 5 seconds if touch controls are disabled
-    private func resetOverlayButtonsTimer() {
-        overlayButtonsTimer?.invalidate()
-        showOverlayButtons = true
-        
-        // Only auto-hide if touch controls are disabled
-        if !viewModel.isControlsVisible {
-            overlayButtonsTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { _ in
-                withAnimation(.easeOut(duration: 0.3)) {
-                    showOverlayButtons = false
-                }
-            }
         }
     }
 }
@@ -318,16 +281,6 @@ struct PauseMenuView: View {
                             showDisplayModeMenu = true
                         }
                         .tint(externalDisplayManager.isExternalDisplayConnected ? .green : .blue)
-                        
-                        // Force External Display (manual initialization like ManicEMU)
-                        PauseButton(
-                            title: "Force External Display",
-                            icon: "tv.and.mediabox"
-                        ) {
-                            AppLogger.info("[EmulationView] Force External Display button tapped")
-                            externalDisplayManager.forceExternalDisplay()
-                        }
-                        .tint(.orange)
                         
                         // Toggle Turbo
                         PauseButton(

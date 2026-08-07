@@ -443,7 +443,11 @@ graphics_api = 2
 
 # Plugin loader state, if enabled plugins will be loaded from the SD card.
 # You can also set if homebrew apps are allowed to enable the plugin loader
+# 0 (default): Disabled, 1: Enabled
 )") DECLARE_KEY(plugin_loader) BOOST_HANA_STRING(R"(
+
+# Allow games to enable/disable plugin loader
+# 0: Disabled, 1 (default): Enabled
 )") DECLARE_KEY(allow_plugin_loader) BOOST_HANA_STRING(R"(
 
 # Apply region free patch to installed applications

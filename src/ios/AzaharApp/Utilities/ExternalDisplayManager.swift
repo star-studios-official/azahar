@@ -233,6 +233,47 @@ class ExternalDisplayManager: ObservableObject {
         NotificationCenter.default.post(name: Notification.Name("ExternalDisplayModeChanged"), object: nil)
     }
     
+    /// Force external display initialization manually (like ManicEMU)
+    /// Creates external window even if no external screen detected
+    /// Useful for AirPlay/HDMI that may not trigger automatic detection
+    func forceExternalDisplay() {
+        AppLogger.info("[ExternalDisplay] Force External Display requested")
+        
+        // Check if already connected
+        if isExternalDisplayConnected {
+            AppLogger.info("[ExternalDisplay] External display already connected, reapplying mode")
+            applyDisplayMode()
+            return
+        }
+        
+        // Try to find any external screen
+        if UIScreen.screens.count > 1 {
+            let screen = UIScreen.screens[1]
+            AppLogger.info("[ExternalDisplay] Found external screen via force: \(screen.bounds)")
+            handleExternalDisplayConnected(screen)
+            return
+        }
+        
+        // No external screen found, but try to initialize AirPlay/HDMI anyway
+        // This handles cases where iOS doesn't properly report external screens
+        AppLogger.info("[ExternalDisplay] No external screen detected, attempting manual initialization")
+        
+        // Check for available window scenes with external screens
+        if #available(iOS 13.0, *) {
+            for scene in UIApplication.shared.connectedScenes {
+                if let windowScene = scene as? UIWindowScene {
+                    if windowScene.screen != UIScreen.main {
+                        AppLogger.info("[ExternalDisplay] Found external window scene: \(windowScene.screen.bounds)")
+                        handleExternalDisplayConnected(windowScene.screen)
+                        return
+                    }
+                }
+            }
+        }
+        
+        AppLogger.warning("ExternalDisplay", message: "Force external display failed - no external screen or window scene found. Please ensure AirPlay/HDMI is properly connected.")
+    }
+    
     func applyDisplayMode() {
         guard let screen = externalScreen else { return }
         
