@@ -509,6 +509,22 @@ graphics_api = 2
 # 0 (default): Off, 1: On
 )") DECLARE_KEY(log_config_loading) BOOST_HANA_STRING(R"(
 
+# Log external display (HDMI/AirPlay) connection events and diagnostics
+# 0 (default): Off, 1: On
+)") DECLARE_KEY(log_external_display) BOOST_HANA_STRING(R"(
+
+# Log GPU rendering statistics and performance metrics
+# 0 (default): Off, 1: On
+)") DECLARE_KEY(log_gpu_performance) BOOST_HANA_STRING(R"(
+
+# Log 3GX plugin loading and execution events
+# 0 (default): Off, 1: On
+)") DECLARE_KEY(log_3gx_plugin) BOOST_HANA_STRING(R"(
+
+# Log controller button presses and input events
+# 0 (default): Off, 1: On
+)") DECLARE_KEY(log_controller_input) BOOST_HANA_STRING(R"(
+
 # Enable RPC server for scripting purposes. Allows accessing guest memory remotely.
 # 0 (default): Off, 1: On
 )") DECLARE_KEY(enable_rpc_server) BOOST_HANA_STRING(R"(
@@ -525,6 +541,38 @@ graphics_api = 2
 # Only needed for debugging, makes performance worse if enabled
 # 0: Off (default), 1: On
 )") DECLARE_KEY(deterministic_async_operations) BOOST_HANA_STRING(R"(
+
+# Run CPU at maximum frequency for better performance (increases heat and battery drain)
+# 0 (default): Off, 1: On
+)") DECLARE_KEY(cpu_high_performance) BOOST_HANA_STRING(R"(
+
+# Run CPU emulation on background thread for smoother performance
+# 0 (default): Off, 1: On
+)") DECLARE_KEY(multithreaded_cpu) BOOST_HANA_STRING(R"(
+
+# Use maximum GPU clock speeds for best performance (increases heat and battery drain)
+# 0 (default): Off, 1: On
+)") DECLARE_KEY(gpu_high_performance) BOOST_HANA_STRING(R"(
+
+# Cache more textures in VRAM for faster rendering
+# 0 (default): Off, 1: On
+)") DECLARE_KEY(aggressive_texture_cache) BOOST_HANA_STRING(R"(
+
+# Use multiple CPU cores to compile shaders faster
+# 0 (default): Off, 1: On
+)") DECLARE_KEY(parallel_shader_compile) BOOST_HANA_STRING(R"(
+
+# Batch rendering operations for better GPU utilization
+# 0 (default): Off, 1: On
+)") DECLARE_KEY(optimize_draw_calls) BOOST_HANA_STRING(R"(
+
+# Use triple buffering for smoother frame pacing (iOS Metal)
+# 0 (default): Off, 1: On
+)") DECLARE_KEY(metal_triple_buffering) BOOST_HANA_STRING(R"(
+
+# Upload textures to GPU asynchronously to reduce stalls
+# 0 (default): Off, 1: On
+)") DECLARE_KEY(async_texture_upload) BOOST_HANA_STRING(R"(
 
 # To LLE a service module add "LLE\<module name>=true"
 
