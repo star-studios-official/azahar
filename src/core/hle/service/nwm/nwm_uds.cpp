@@ -25,6 +25,7 @@
 #include "core/hle/service/nwm/uds_beacon.h"
 #include "core/hle/service/nwm/uds_connection.h"
 #include "core/hle/service/nwm/uds_data.h"
+#include "core/loader/loader.h"
 #include "core/memory.h"
 
 SERIALIZE_EXPORT_IMPL(Service::NWM::NWM_UDS)
@@ -1042,7 +1043,9 @@ Result NWM_UDS::BeginHostingNetwork(std::span<const u8> network_info_buffer,
     std::string game_title = "3DS Game";
     if (auto app_loader = system.GetAppLoader().lock()) {
         std::string title;
-        if (app_loader->ReadTitle(title) == Loader::ResultStatus::Success) {
+        // ReadTitle returns Loader::ResultStatus, not Service::NWM::ResultStatus
+        const auto read_result = app_loader->ReadTitle(title);
+        if (read_result == ::Loader::ResultStatus::Success) {
             game_title = title;
         }
     }
