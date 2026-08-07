@@ -1,4 +1,4 @@
-name: ios-build-27
+name: ios-build-27-large
 
 on:
   push:
