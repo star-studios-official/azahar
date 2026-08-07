@@ -313,6 +313,42 @@ Loader::ResultStatus FileSys::Plugin3GXLoader::Map(
     process.vm_manager.Reprotect(vma_heap.Unwrap(), Kernel::VMAPermission::ReadWriteExecute);
 
     kernel.memory.Plugin3GXFramebufferAddress() = Memory::FCRAM_PADDR + fcram_offset + heap_offset;
+    
+    // Create plugin communication shared memory region at 0x10000000
+    // This is used by games to communicate with plugins
+    constexpr u32 plugin_shared_memory_addr = 0x10000000;
+    constexpr u32 plugin_shared_memory_size = 0x1000; // 4KB for plugin communication
+    
+    // Allocate backing memory for the plugin shared memory from SYSTEM region
+    auto plugin_shared_offset = kernel.GetMemoryRegion(Kernel::MemoryRegion::SYSTEM)
+                                      ->LinearAllocate(plugin_shared_memory_size);
+    
+    if (plugin_shared_offset) {
+        auto backing_memory_plugin_shared = kernel.memory.GetFCRAMRef(plugin_shared_offset.value());
+        std::fill(backing_memory_plugin_shared.GetPtr(), 
+                  backing_memory_plugin_shared.GetPtr() + plugin_shared_memory_size, 0);
+        
+        auto vma_plugin_shared = process.vm_manager.MapBackingMemory(
+            plugin_shared_memory_addr, backing_memory_plugin_shared, plugin_shared_memory_size,
+            Kernel::MemoryState::Shared);
+        
+        if (vma_plugin_shared.Succeeded()) {
+            process.vm_manager.Reprotect(vma_plugin_shared.Unwrap(), 
+                                        Kernel::VMAPermission::ReadWrite);
+            LOG_INFO(Service_PLGLDR, 
+                     "Created plugin communication shared memory at 0x{:08X} (size: 0x{:X})",
+                     plugin_shared_memory_addr, plugin_shared_memory_size);
+        } else {
+            LOG_ERROR(Service_PLGLDR,
+                      "Failed to map plugin communication shared memory at 0x{:08X}", 
+                      plugin_shared_memory_addr);
+        }
+    } else {
+        LOG_ERROR(Service_PLGLDR, 
+                  "Failed to allocate plugin communication shared memory (size: 0x{:X})",
+                  plugin_shared_memory_size);
+    }
+    
     plg_context.plugin_loaded = true;
     plg_context.plugin_process_id = process.process_id;
     plg_context.use_user_load_parameters = false;
