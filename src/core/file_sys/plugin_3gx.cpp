@@ -28,6 +28,7 @@
 #include "core/hle/kernel/vm_manager.h"
 #include "core/loader/loader.h"
 #include "common/settings.h"
+#include "core/core.h"
 
 static std::string ReadTextInfo(FileUtil::IOFile& file, std::size_t offset, std::size_t max_size) {
     if (offset == 0 || max_size == 0 ||
