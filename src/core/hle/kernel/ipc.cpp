@@ -108,9 +108,9 @@ Result TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySystem
             if (static_buffer_src_address == 0) {
                 LOG_ERROR(Kernel,
                           "Static buffer source address is NULL (size={}), buffer_id={}, "
-                          "src_process={:08X}, PC={:08X}",
-                          bufferInfo.size, bufferInfo.buffer_id,
-                          src_process ? src_process->process_id : 0, GetPC());
+                          "src_process={:08X}",
+                          static_cast<u32>(bufferInfo.size), static_cast<u32>(bufferInfo.buffer_id),
+                          src_process ? src_process->process_id : 0);
                 // Skip this static buffer and continue with zero address
                 cmd_buf[i++] = 0;
                 break;
@@ -141,7 +141,8 @@ Result TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySystem
                 LOG_ERROR(Kernel,
                           "Static buffer target address is NULL (size={}), buffer_id={}, "
                           "dst_process={:08X}",
-                          target_buffer.descriptor.size, bufferInfo.buffer_id,
+                          static_cast<u32>(target_buffer.descriptor.size), 
+                          static_cast<u32>(bufferInfo.buffer_id),
                           dst_process ? dst_process->process_id : 0);
                 cmd_buf[i++] = 0;
                 break;
@@ -153,7 +154,8 @@ Result TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySystem
                 LOG_ERROR(Kernel,
                           "Static buffer data is too big: target_size={}, data_size={}, "
                           "buffer_id={}, src_addr={:08X}, dst_addr={:08X}",
-                          target_buffer.descriptor.size, data.size(), bufferInfo.buffer_id,
+                          static_cast<u32>(target_buffer.descriptor.size), data.size(), 
+                          static_cast<u32>(bufferInfo.buffer_id),
                           static_buffer_src_address, target_buffer.address);
                 // Copy as much as we can instead of crashing
                 data.resize(target_buffer.descriptor.size);
