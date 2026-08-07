@@ -48,6 +48,7 @@
 #include "ios/AzaharBridge/camera_ios.h"
 #include "ios/AzaharBridge/applets_ios.h"
 #include "ios/AzaharBridge/azahar_ios.h"
+#include "citra_network/network.h"
 #include "citra_network/announce_multiplayer_session.h"
 #include "video_core/gpu.h"
 #include "video_core/renderer_base.h"
@@ -148,6 +149,30 @@ void az_init_crypto(void) {
     LOG_INFO(Frontend, "[Init] Initializing AES encryption keys for CIA operations");
     HW::AES::InitKeys();
     LOG_INFO(Frontend, "[Init] AES keys initialized successfully");
+}
+
+void az_init_network(void) {
+    LOG_INFO(Frontend, "[Init] Initializing network subsystem for local multiplayer");
+    if (Network::Init()) {
+        LOG_INFO(Frontend, "[Init] Network subsystem initialized successfully");
+        
+        // Bind the wifi packet callback to NWM_UDS now that the network is initialized
+        if (Core::System::GetInstance().IsPoweredOn()) {
+            auto room_member = Network::GetRoomMember().lock();
+            if (room_member) {
+                LOG_INFO(Frontend, "[Init] Network room member available, NWM_UDS will bind callbacks");
+            } else {
+                LOG_WARNING(Frontend, "[Init] Network room member not available yet");
+            }
+        }
+    } else {
+        LOG_ERROR(Frontend, "[Init] Failed to initialize network subsystem");
+    }
+}
+
+void az_shutdown_network(void) {
+    LOG_INFO(Frontend, "[Shutdown] Shutting down network subsystem");
+    Network::Shutdown();
 }
 
 void az_reload_settings(void) {

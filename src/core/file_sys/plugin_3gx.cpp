@@ -435,4 +435,14 @@ void FileSys::Plugin3GXLoader::MapBootloader(Kernel::Process& process, Kernel::K
     game_instructions[1] = _3GX_exe_load_addr - bootloader_memory_size;
     kernel.memory.WriteBlock(process, process.codeset->CodeSegment().addr, game_instructions,
                              sizeof(u32) * 2);
+
+    // Invalidate instruction cache so the patched entry point is executed
+    // This is critical for interpreter modes (FastInterp/DynCom) to see the new instructions
+    auto& system = Core::System::GetInstance();
+    for (std::size_t core_id = 0; core_id < system.GetNumCores(); ++core_id) {
+        system.GetRunningCore(core_id).InvalidateCacheRange(process.codeset->CodeSegment().addr,
+                                                             sizeof(u32) * 2);
+    }
+    LOG_INFO(Service_PLGLDR, "Invalidated instruction cache at {:08X} for plugin bootloader entry",
+             process.codeset->CodeSegment().addr);
 }

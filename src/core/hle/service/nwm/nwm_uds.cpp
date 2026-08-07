@@ -995,6 +995,31 @@ Result NWM_UDS::BeginHostingNetwork(std::span<const u8> network_info_buffer,
     system.CoreTiming().ScheduleEvent(msToCycles(DefaultBeaconInterval * MillisecondsPerTU),
                                       beacon_broadcast_event, 0);
 
+#ifdef CITRA_IOS
+    // On iOS, start the MultipeerConnectivity session for device-to-device communication
+    LOG_INFO(Service_NWM, "[LocalMP] Starting iOS MultipeerConnectivity session");
+    
+    // Get game title for display
+    std::string game_title = "3DS Game";
+    if (auto app_loader = system.GetAppLoader().lock()) {
+        std::string title;
+        if (app_loader->ReadTitle(title) == Loader::ResultStatus::Success) {
+            game_title = title;
+        }
+    }
+    
+    // Start hosting via iOS Multipeer backend
+    char room_name[64];
+    snprintf(room_name, sizeof(room_name), "Azahar_%08llX", system.Kernel().GetCurrentProcess()->codeset->program_id);
+    
+    extern void az_nwm_start_hosting(const char* room_name, const char* title_id, const char* game_title);
+    char title_id_str[17];
+    snprintf(title_id_str, sizeof(title_id_str), "%016llX", system.Kernel().GetCurrentProcess()->codeset->program_id);
+    az_nwm_start_hosting(room_name, title_id_str, game_title.c_str());
+    
+    LOG_INFO(Service_NWM, "[LocalMP] iOS MultipeerConnectivity host started: {}", room_name);
+#endif
+
     return ResultSuccess;
 }
 

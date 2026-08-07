@@ -164,6 +164,13 @@ void az_create_log_file(void);
 /// This allows NUS downloads to work without starting emulation.
 void az_init_crypto(void);
 
+/// Initializes network subsystem for local multiplayer (must be called before starting emulation).
+/// Should be called once on app startup after az_set_user_directory.
+void az_init_network(void);
+
+/// Shuts down network subsystem (call on app termination).
+void az_shutdown_network(void);
+
 /// Re-reads config.ini and applies settings to the running core if powered on.
 void az_reload_settings(void);
 
