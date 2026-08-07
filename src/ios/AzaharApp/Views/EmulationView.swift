@@ -46,19 +46,22 @@ struct EmulationView: View {
                 MetalView(viewModel: viewModel, safeArea: geometry.safeAreaInsets)
                     .overlay {
                         // 3DS bottom screen touch overlay - ALWAYS enabled for touch even with controller
+                        // This overlay only handles 3DS touch screen (not buttons)
                         TouchScreenOverlay(viewModel: viewModel, geometry: geometry)
                             .allowsHitTesting(true)
                     }
                     .overlay {
                         // Touch controls visibility
+                        // When visible, controls are above the touch screen overlay
                         if viewModel.isControlsVisible {
                             TouchControlsView(viewModel: viewModel)
+                                .allowsHitTesting(true)
                         }
                     }
             }
             
             // Tap detector overlay for showing hidden buttons (BEHIND touch screen and controls)
-            // zIndex -1 ensures it's below TouchScreenOverlay so touches reach the 3DS screen
+            // Only active when overlay buttons are hidden AND controls are hidden
             if !showOverlayButtons && !viewModel.isControlsVisible {
                 Color.clear
                     .contentShape(Rectangle())

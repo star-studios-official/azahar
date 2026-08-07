@@ -30,66 +30,53 @@ struct TouchControlsView: View {
             let joystickSize = settings.buttonSize(for: .joystick, screenSize: geometry.size)
             let centerButtonSize = settings.buttonSize(for: .centerButton, screenSize: geometry.size)
             
-            ZStack {
-                // Hide controls when controller is connected (unless in edit mode)
-                if !controllerManager.isControllerConnected || settings.isEditModeEnabled {
-                    if isLandscape {
-                        landscapeControls(
-                            width: w,
-                            height: h,
-                            faceButtonSize: faceButtonSize,
-                            dpadSize: dpadSize,
-                            triggerSize: triggerSize,
-                            joystickSize: joystickSize,
-                            centerButtonSize: centerButtonSize
-                        )
-                        .opacity(settings.isEditModeEnabled ? 1.0 : controlsOpacity)
-                    } else {
-                        portraitControls(
-                            width: w,
-                            height: h,
-                            faceButtonSize: faceButtonSize,
-                            dpadSize: dpadSize,
-                            triggerSize: triggerSize,
-                            joystickSize: joystickSize,
-                            centerButtonSize: centerButtonSize
-                        )
-                        .opacity(settings.isEditModeEnabled ? 1.0 : controlsOpacity)
-                    }
-                }
-                
-                // Always show pause button (even with controller)
-                VStack {
-                    HStack {
-                        Spacer()
-                        Button {
-                            viewModel.togglePause()
-                        } label: {
-                            Image(systemName: "pause.circle.fill")
-                                .font(.system(size: 44))
-                                .foregroundStyle(.white.opacity(0.8))
-                                .shadow(radius: 2)
-                        }
-                        .padding(16)
-                    }
-                    Spacer()
-                }
-                
-                // Edit mode overlay
-                if settings.isEditModeEnabled {
-                    editModeOverlay(geometry: geometry)
-                }
-                
-                // Invisible touch detector for auto-hide functionality
-                Color.clear
-                    .contentShape(Rectangle())
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { _ in
-                                handleUserTouch()
-                            }
+            // Hide controls when controller is connected (unless in edit mode)
+            if !controllerManager.isControllerConnected || settings.isEditModeEnabled {
+                if isLandscape {
+                    landscapeControls(
+                        width: w,
+                        height: h,
+                        faceButtonSize: faceButtonSize,
+                        dpadSize: dpadSize,
+                        triggerSize: triggerSize,
+                        joystickSize: joystickSize,
+                        centerButtonSize: centerButtonSize
                     )
-                    .allowsHitTesting(true)
+                    .opacity(settings.isEditModeEnabled ? 1.0 : controlsOpacity)
+                } else {
+                    portraitControls(
+                        width: w,
+                        height: h,
+                        faceButtonSize: faceButtonSize,
+                        dpadSize: dpadSize,
+                        triggerSize: triggerSize,
+                        joystickSize: joystickSize,
+                        centerButtonSize: centerButtonSize
+                    )
+                    .opacity(settings.isEditModeEnabled ? 1.0 : controlsOpacity)
+                }
+            }
+            
+            // Always show pause button (even with controller)
+            VStack {
+                HStack {
+                    Spacer()
+                    Button {
+                        viewModel.togglePause()
+                    } label: {
+                        Image(systemName: "pause.circle.fill")
+                            .font(.system(size: 44))
+                            .foregroundStyle(.white.opacity(0.8))
+                            .shadow(radius: 2)
+                    }
+                    .padding(16)
+                }
+                Spacer()
+            }
+            
+            // Edit mode overlay
+            if settings.isEditModeEnabled {
+                editModeOverlay(geometry: geometry)
             }
         }
         .allowsHitTesting(viewModel.isControlsVisible || settings.isEditModeEnabled)

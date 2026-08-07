@@ -328,14 +328,26 @@ class ExternalDisplayManager: ObservableObject {
             return
         }
         
+        // Check if main screen is mirrored (common with HDMI adapters)
+        if #available(iOS 13.0, *) {
+            if let mirroredScreen = UIScreen.main.mirrored {
+                AppLogger.info("[ExternalDisplay] Force: Using mirrored screen: \(mirroredScreen.bounds)")
+                handleExternalDisplayConnected(mirroredScreen)
+                showMirrorModeAlert = true
+                return
+            }
+        }
+        
         // No external screen found, but try to initialize AirPlay/HDMI anyway
         // This handles cases where iOS doesn't properly report external screens
         AppLogger.info("[ExternalDisplay] No external screen detected, attempting manual initialization")
         
-        // Check for available window scenes with external screens
+        // Check for available window scenes with external screens (including inactive scenes)
         if #available(iOS 13.0, *) {
+            // First check connected scenes
             for scene in UIApplication.shared.connectedScenes {
                 if let windowScene = scene as? UIWindowScene {
+                    AppLogger.info("[ExternalDisplay] Checking scene: \(windowScene.screen.bounds), isMain: \(windowScene.screen == UIScreen.main)")
                     if windowScene.screen != UIScreen.main {
                         AppLogger.info("[ExternalDisplay] Found external window scene: \(windowScene.screen.bounds)")
                         handleExternalDisplayConnected(windowScene.screen)
@@ -343,9 +355,21 @@ class ExternalDisplayManager: ObservableObject {
                     }
                 }
             }
+            
+            // Also check ALL open sessions (including background/disconnected)
+            for session in UIApplication.shared.openSessions {
+                if let windowScene = session.scene as? UIWindowScene {
+                    AppLogger.info("[ExternalDisplay] Checking open session scene: \(windowScene.screen.bounds)")
+                    if windowScene.screen != UIScreen.main {
+                        AppLogger.info("[ExternalDisplay] Found external screen in open session: \(windowScene.screen.bounds)")
+                        handleExternalDisplayConnected(windowScene.screen)
+                        return
+                    }
+                }
+            }
         }
         
-        AppLogger.warning("ExternalDisplay", message: "Force external display failed - no external screen or window scene found. Please ensure AirPlay/HDMI is properly connected.")
+        AppLogger.warning("ExternalDisplay", message: "Force external display failed - no external screen or window scene found. Please ensure AirPlay/HDMI is properly connected and try:\n1. Disconnect and reconnect HDMI/AirPlay\n2. Enable screen mirroring in Control Center\n3. Check if your adapter supports video output")
     }
     
     func applyDisplayMode() {
