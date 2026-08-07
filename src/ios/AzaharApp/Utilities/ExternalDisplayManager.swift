@@ -481,16 +481,12 @@ class ExternalDisplayManager: ObservableObject {
         AppLogger.info("[ExternalDisplay]   - Contents scale: \(metalLayer.contentsScale)")
         
         // Set the secondary surface in the C++ emulator core
-        let scale = metalLayer.contentsScale
-        let width = Int32(view.bounds.width * scale)
-        let height = Int32(view.bounds.height * scale)
+        let scale = Float(metalLayer.contentsScale)
         
-        AppLogger.info("[ExternalDisplay] Setting secondary surface: \(width)x\(height) @ \(scale)x")
+        AppLogger.info("[ExternalDisplay] Setting secondary surface with scale: \(scale)")
         az_emu_secondary_surface_set(
-            metalLayer,
-            width,
-            height,
-            Float(scale)
+            Unmanaged.passUnretained(metalLayer).toOpaque(),
+            scale
         )
         
         AppLogger.info("[ExternalDisplay] Secondary Metal surface setup complete")
