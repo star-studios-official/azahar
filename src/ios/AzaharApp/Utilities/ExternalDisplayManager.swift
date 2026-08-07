@@ -39,13 +39,13 @@ class ExternalDisplayManager: ObservableObject {
         var description: String {
             switch self {
             case .topScreenExternal:
-                return "3DS top screen on external display, bottom screen on iPhone with touch controls"
+                return "Like a real 3DS: Top screen fullscreen on TV, bottom screen on iPhone with touch (recommended)"
             case .bottomScreenExternal:
-                return "3DS bottom screen on external display, top screen on iPhone"
+                return "Bottom screen fullscreen on TV, top screen on iPhone (no touch on TV)"
             case .mirrorBothScreens:
-                return "Both screens shown on external and iPhone"
+                return "Both screens shown on external and iPhone (mirrored)"
             case .externalFullscreen:
-                return "Both screens on external display only, iPhone shows controls"
+                return "Both screens side-by-side on TV, iPhone shows only controls"
             }
         }
     }
@@ -153,26 +153,29 @@ class ExternalDisplayManager: ObservableObject {
         case .topScreenExternal:
             // Top screen on external display (secondary window), bottom on iPhone (primary).
             // SeparateWindows layout + swap_screen=true means:
-            //   primary (iPhone) renders bottom screen, secondary (external) renders top screen.
+            //   primary (iPhone) renders bottom screen, secondary (external) renders top screen fullscreen.
             az_setting_set_int("Layout", "layout_option", 4)      // SeparateWindows
-            az_setting_set_int("Layout", "secondary_display_layout", 0)
+            az_setting_set_int("Layout", "secondary_display_layout", 5) // SingleScreen (fullscreen)
             az_setting_set_bool("Layout", "swap_screen", true)
+            az_setting_set_int("Layout", "upright_screen", 1)      // Top screen on secondary
         case .bottomScreenExternal:
             // Bottom screen on external display (secondary window), top on iPhone (primary).
             // SeparateWindows layout + swap_screen=false means:
-            //   primary (iPhone) renders top screen, secondary (external) renders bottom screen.
+            //   primary (iPhone) renders top screen, secondary (external) renders bottom screen fullscreen.
             az_setting_set_int("Layout", "layout_option", 4)      // SeparateWindows
-            az_setting_set_int("Layout", "secondary_display_layout", 1)
+            az_setting_set_int("Layout", "secondary_display_layout", 5) // SingleScreen (fullscreen)
             az_setting_set_bool("Layout", "swap_screen", false)
+            az_setting_set_int("Layout", "upright_screen", 0)      // Bottom screen on secondary
         case .mirrorBothScreens:
             // Both screens shown on both displays (same layout everywhere).
+            // Use LargeScreen layout which shows both screens side-by-side or stacked.
             az_setting_set_int("Layout", "layout_option", 2)      // LargeScreen (both screens)
-            az_setting_set_int("Layout", "secondary_display_layout", 2)
+            az_setting_set_int("Layout", "secondary_display_layout", 2) // LargeScreen on secondary too
         case .externalFullscreen:
-            // Both screens on external display. Keep the standard layout so the
-            // secondary window renders both screens fullscreen; the iPhone shows controls.
+            // Both screens on external display in optimal layout for TV.
+            // The secondary window renders both screens fullscreen; iPhone shows controls only.
             az_setting_set_int("Layout", "layout_option", 2)      // LargeScreen (both screens)
-            az_setting_set_int("Layout", "secondary_display_layout", 2)
+            az_setting_set_int("Layout", "secondary_display_layout", 2) // LargeScreen fullscreen on external
         }
         
         // Apply the layout changes to the running emulator
@@ -184,42 +187,93 @@ class ExternalDisplayManager: ObservableObject {
         // Recompute framebuffer layouts for both windows
         let portrait = UIScreen.main.bounds.height > UIScreen.main.bounds.width
         az_update_framebuffer(portrait)
+        
+        print("[ExternalDisplay] Applied display mode: \(displayMode.displayName)")
     }
     
     private func setupExternalWindow(on screen: UIScreen) {
-        // Reuse the existing external window if the scene delegate already made one.
+        // Reuse the existing external window if it exists
         if let existing = externalWindow {
             if existing.rootViewController == nil {
                 existing.rootViewController = UIHostingController(
                     rootView: ExternalDisplayView(displayManager: self)
                 )
             }
-            existing.isHidden = false
+            // Always update frame to match external screen bounds
+            existing.frame = screen.bounds
+            existing.screen = screen
+            existing.makeKeyAndVisible()
             print("External window reused: \(screen.bounds)")
             return
         }
         
-        // Modern approach for iOS 13+: find the window scene created for the
-        // external screen (requires UIApplicationSupportsMultipleScenes = true).
-        guard let windowScene = UIApplication.shared.connectedScenes
-            .compactMap({ $0 as? UIWindowScene })
-            .first(where: { $0.screen == screen }) else {
-            print("No window scene available for external screen yet")
-            return
+        // Set the external screen to use its best available display mode (highest resolution)
+        if let mode = screen.availableModes.max(by: { $0.size.width * $0.size.height < $1.size.width * $1.size.height }) {
+            screen.currentMode = mode
+            print("External screen set to mode: \(mode.size.width)×\(mode.size.height) @ \(mode.pixelAspectRatio)")
         }
         
-        // Create a hosting controller with MetalView for external display
+        // Override screen settings to ensure fullscreen
+        screen.overscanCompensation = .none // Disable overscan to use full screen
+        
+        // Modern iOS 13+ approach: Use window scene if available
+        if #available(iOS 13.0, *) {
+            if let windowScene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.screen == screen }) {
+                // Create window using window scene (modern API)
+                let window = UIWindow(windowScene: windowScene)
+                window.frame = screen.bounds
+                window.screen = screen
+                window.backgroundColor = .black
+                window.windowLevel = .normal
+                
+                let hostingController = UIHostingController(
+                    rootView: ExternalDisplayView(displayManager: self)
+                )
+                hostingController.view.frame = screen.bounds
+                hostingController.view.backgroundColor = .black
+                hostingController.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+                
+                window.rootViewController = hostingController
+                window.makeKeyAndVisible()
+                
+                externalWindow = window
+                
+                print("[ExternalDisplay] Window setup (WindowScene) complete:")
+                print("  - Screen bounds: \(screen.bounds)")
+                print("  - Screen scale: \(screen.scale)")
+                print("  - Screen nativeScale: \(screen.nativeScale)")
+                print("  - Screen nativeBounds: \(screen.nativeBounds)")
+                print("  - Window frame: \(window.frame)")
+                return
+            }
+        }
+        
+        // Fallback: Direct UIWindow creation with external screen (legacy API)
+        let window = UIWindow(frame: screen.bounds)
+        window.screen = screen
+        window.backgroundColor = .black
+        window.windowLevel = .normal
+        
         let hostingController = UIHostingController(
             rootView: ExternalDisplayView(displayManager: self)
         )
+        hostingController.view.frame = screen.bounds
+        hostingController.view.backgroundColor = .black
+        hostingController.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         
-        let window = UIWindow(windowScene: windowScene)
         window.rootViewController = hostingController
-        window.isHidden = false
+        window.makeKeyAndVisible()
         
         externalWindow = window
         
-        print("External window setup complete: \(screen.bounds)")
+        print("[ExternalDisplay] Window setup (Direct) complete:")
+        print("  - Screen bounds: \(screen.bounds)")
+        print("  - Screen scale: \(screen.scale)")
+        print("  - Screen nativeScale: \(screen.nativeScale)")
+        print("  - Screen nativeBounds: \(screen.nativeBounds)")
+        print("  - Window frame: \(window.frame)")
     }
     
     deinit {
@@ -232,24 +286,41 @@ struct ExternalDisplayView: View {
     @ObservedObject var displayManager: ExternalDisplayManager
     
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            
-            ExternalMetalView()
-                .ignoresSafeArea()
-            
-            // Optional: Show display mode indicator briefly
-            VStack {
-                Spacer()
-                Text(displayManager.displayMode.displayName)
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.5))
-                    .padding(8)
-                    .background(.black.opacity(0.3))
-                    .clipShape(Capsule())
-                    .padding(.bottom, 20)
+        GeometryReader { geometry in
+            ZStack {
+                Color.black
+                    .ignoresSafeArea()
+                
+                // Metal view fills the entire external display
+                ExternalMetalView()
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                
+                // Optional: Show display mode indicator briefly
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text(displayManager.displayMode.displayName)
+                                .font(.system(size: 14, weight: .medium))
+                            Text("External Display")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundStyle(.white.opacity(0.6))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+                        .padding(.trailing, 20)
+                        .padding(.bottom, 20)
+                    }
+                }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
+        .ignoresSafeArea(.all)
+        .statusBarHidden(true)
+        .persistentSystemOverlays(.hidden)
     }
 }
 
@@ -292,25 +363,52 @@ final class ExternalMetalUIView: UIView {
         metalLayer.pixelFormat = .bgra8Unorm
         metalLayer.framebufferOnly = true
         
-        // Use external screen's scale
-        let scale = window?.screen.scale ?? UIScreen.main.scale
+        // Use external screen's native scale and full bounds
+        guard let window = window, let screen = window.screen else {
+            // Fallback to main screen if window not yet assigned
+            metalLayer.contentsScale = UIScreen.main.scale
+            metalLayer.drawableSize = CGSize(width: bounds.size.width * UIScreen.main.scale, 
+                                             height: bounds.size.height * UIScreen.main.scale)
+            return
+        }
+        
+        // Use the external screen's native scale for full resolution
+        let scale = screen.nativeScale
         metalLayer.contentsScale = scale
-        metalLayer.drawableSize = CGSize(width: bounds.size.width * scale, height: bounds.size.height * scale)
+        
+        // Set drawable size to match the full screen bounds at native scale
+        let screenBounds = screen.bounds
+        metalLayer.drawableSize = CGSize(width: screenBounds.size.width * scale, 
+                                         height: screenBounds.size.height * scale)
+        
+        print("[ExternalDisplay] Metal layer setup: bounds=\(screenBounds), scale=\(scale), drawableSize=\(metalLayer.drawableSize)")
     }
     
     override func layoutSubviews() {
         super.layoutSubviews()
+        
+        // Ensure the layer fills the entire view bounds
         metalLayer.frame = bounds
         
-        let scale = window?.screen.scale ?? UIScreen.main.scale
-        metalLayer.contentsScale = scale
-        metalLayer.drawableSize = CGSize(width: bounds.size.width * scale, height: bounds.size.height * scale)
+        guard let window = window, let screen = window.screen else {
+            return
+        }
         
+        // Use native scale for maximum resolution
+        let scale = screen.nativeScale
+        metalLayer.contentsScale = scale
+        
+        // Update drawable size to match current bounds at native scale
+        metalLayer.drawableSize = CGSize(width: bounds.size.width * scale, 
+                                         height: bounds.size.height * scale)
+        
+        // Re-register the surface with the emulator if already set
         if isSurfaceSet {
             az_emu_secondary_surface_set(
                 Unmanaged.passUnretained(metalLayer).toOpaque(),
                 Float(scale)
             )
+            print("[ExternalDisplay] Metal surface updated: drawableSize=\(metalLayer.drawableSize), scale=\(scale)")
         }
     }
     

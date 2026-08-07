@@ -50,7 +50,9 @@ struct EmulationView: View {
                     .overlay {
                         // Always show touch controls on the iPhone. In externalFullscreen
                         // mode the iPhone acts as a controller for the external display.
-                        TouchControlsView(viewModel: viewModel)
+                        if viewModel.isControlsVisible {
+                            TouchControlsView(viewModel: viewModel)
+                        }
                     }
             }
             
@@ -78,17 +80,26 @@ struct EmulationView: View {
                             .background(.ultraThinMaterial, in: Circle())
                     }
                     
-                    // External display mode button (shown when external display connected)
-                    if externalDisplayManager.isExternalDisplayConnected {
-                        Button {
-                            showDisplayModeMenu = true
-                        } label: {
-                            Image(systemName: "tv")
-                                .font(.title2)
-                                .foregroundStyle(.white)
-                                .padding(8)
-                                .background(.ultraThinMaterial, in: Circle())
-                        }
+                    // External display mode button (always shown for configuration)
+                    Button {
+                        showDisplayModeMenu = true
+                    } label: {
+                        Image(systemName: externalDisplayManager.isExternalDisplayConnected ? "tv.fill" : "tv")
+                            .font(.title2)
+                            .foregroundStyle(externalDisplayManager.isExternalDisplayConnected ? .green : .white)
+                            .padding(8)
+                            .background(.ultraThinMaterial, in: Circle())
+                    }
+                    
+                    // Toggle controls visibility button
+                    Button {
+                        viewModel.isControlsVisible.toggle()
+                    } label: {
+                        Image(systemName: viewModel.isControlsVisible ? "gamecontroller.fill" : "gamecontroller")
+                            .font(.title2)
+                            .foregroundStyle(.white)
+                            .padding(8)
+                            .background(.ultraThinMaterial, in: Circle())
                     }
                     
                     Spacer()
@@ -132,6 +143,8 @@ struct EmulationView: View {
             if showPauseMenu {
                 PauseMenuView(
                     viewModel: viewModel,
+                    externalDisplayManager: externalDisplayManager,
+                    showDisplayModeMenu: $showDisplayModeMenu,
                     onResume: {
                         viewModel.resume()
                         showPauseMenu = false
@@ -189,6 +202,8 @@ struct EmulationView: View {
 /// Pause menu (equivalent to Android's EmulationMenuDialog).
 struct PauseMenuView: View {
     @ObservedObject var viewModel: EmulationViewModel
+    @ObservedObject var externalDisplayManager: ExternalDisplayManager
+    @Binding var showDisplayModeMenu: Bool
     @State private var showCheatsView = false
     @State private var showSettingsView = false
     @State private var showSaveStateDialog = false
@@ -241,12 +256,23 @@ struct PauseMenuView: View {
                         // Swap Screens
                         PauseButton(title: "Swap Screens", icon: "rectangle.2.swap") {
                             viewModel.swapScreens()
+                            // Don't close menu - let user see immediate change
                         }
                         
                         // Cycle Layout
                         PauseButton(title: "Change Layout", icon: "rectangle.split.3x1") {
                             viewModel.cycleLayout()
+                            // Don't close menu - let user see immediate change
                         }
+                        
+                        // External Display Settings (always shown)
+                        PauseButton(
+                            title: "External Display",
+                            icon: externalDisplayManager.isExternalDisplayConnected ? "tv.fill" : "tv"
+                        ) {
+                            showDisplayModeMenu = true
+                        }
+                        .tint(externalDisplayManager.isExternalDisplayConnected ? .green : .blue)
                         
                         // Toggle Turbo
                         PauseButton(
@@ -378,8 +404,9 @@ struct ExternalDisplayModeMenu: View {
             
             VStack(spacing: 20) {
                 HStack {
-                    Image(systemName: "tv")
+                    Image(systemName: displayManager.isExternalDisplayConnected ? "tv.fill" : "tv")
                         .font(.title2)
+                        .foregroundStyle(displayManager.isExternalDisplayConnected ? .green : .white)
                     Text("External Display")
                         .font(.title2.bold())
                     Spacer()
@@ -393,11 +420,40 @@ struct ExternalDisplayModeMenu: View {
                 }
                 .foregroundStyle(.white)
                 
+                // Connection status
+                if displayManager.isExternalDisplayConnected {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("External display connected")
+                            .font(.subheadline)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(.green.opacity(0.2), in: RoundedRectangle(cornerRadius: 8))
+                } else {
+                    HStack {
+                        Image(systemName: "info.circle.fill")
+                            .foregroundStyle(.blue)
+                        Text("Connect via AirPlay, HDMI, or USB-C to enable external display")
+                            .font(.caption)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.vertical, 8)
+                    .padding(.horizontal, 12)
+                    .background(.blue.opacity(0.2), in: RoundedRectangle(cornerRadius: 8))
+                }
+                
                 VStack(spacing: 12) {
                     ForEach(ExternalDisplayManager.ExternalDisplayMode.allCases, id: \.self) { mode in
                         Button {
                             displayManager.setDisplayMode(mode)
-                            isPresented = false
+                            if displayManager.isExternalDisplayConnected {
+                                // Apply immediately if connected
+                                displayManager.applyDisplayMode()
+                            }
                         } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
@@ -422,6 +478,8 @@ struct ExternalDisplayModeMenu: View {
                                 in: RoundedRectangle(cornerRadius: 12)
                             )
                         }
+                        .disabled(!displayManager.isExternalDisplayConnected && mode != displayManager.displayMode)
+                        .opacity(!displayManager.isExternalDisplayConnected && mode != displayManager.displayMode ? 0.5 : 1.0)
                     }
                 }
             }
