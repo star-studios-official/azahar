@@ -59,7 +59,7 @@ class ExternalDisplayManager: ObservableObject {
         for (index, screen) in UIScreen.screens.enumerated() {
             AppLogger.info("[ExternalDisplay] Screen[\(index)]: bounds=\(screen.bounds), scale=\(screen.scale), nativeScale=\(screen.nativeScale)")
             if #available(iOS 13.0, *) {
-                AppLogger.info("[ExternalDisplay] Screen[\(index)]: mirroredScreen=\(screen.mirroredScreen != nil)")
+                AppLogger.info("[ExternalDisplay] Screen[\(index)]: mirrored=\(screen.mirrored != nil)")
             }
         }
         
@@ -157,7 +157,7 @@ class ExternalDisplayManager: ObservableObject {
             screen.currentMode = mode
             AppLogger.info("[ExternalDisplay] Screen mode set successfully")
         } else {
-            AppLogger.warning("[ExternalDisplay] No available modes found for external screen")
+            AppLogger.warning("ExternalDisplay", message: "No available modes found for external screen")
         }
         
         // ManicEMU-style: Auto-detect and default to fullscreen mode

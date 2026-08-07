@@ -153,142 +153,20 @@ final class GamepadManager: ObservableObject {
     }
     
     /// Setup touchpad for PS4/PS5 controllers to emulate bottom screen touch
+    /// NOTE: iOS GameController framework does not expose touchpad axes/buttons
+    /// This is a placeholder for future implementation if Apple adds touchpad support
     private func setupTouchpad(controller: GCController) {
         guard #available(iOS 14.0, *) else { return }
         
-        // Check for DualSense (PS5) or DualShock 4 (PS4) touchpad
-        // Touchpad is accessed via physicalInputProfile on iOS 14+
-        let physicalInput = controller.physicalInputProfile
+        // Unfortunately, iOS GameController framework does not provide access to
+        // PS5 DualSense or PS4 DualShock 4 touchpad input as of iOS 18.0
+        // The touchpad constants (GCInputTouchpadX, GCInputTouchpadY, etc.)
+        // are only available on macOS/Catalyst, not iOS
         
-        // Check for touchpad axes - these are the standard GameController constants
-        // GCInputTouchpadX and GCInputTouchpadY for DualSense/DualShock4 touchpad
-        // The touchpad may appear as GCInputLeftX/LeftY with specific controller profiles
-        let touchpadX: GCControllerAxisInput?
-        let touchpadY: GCControllerAxisInput?
-        let touchpadButton: GCControllerButtonInput?
+        AppLogger.info("[GamepadManager] Touchpad support not available on iOS - touchpad input cannot be used for bottom screen touch")
         
-        // Try standard touchpad axes first (iOS 15+)
-        if #available(iOS 15.0, *) {
-            touchpadX = physicalInput.axes[GCInputTouchpadX]
-            touchpadY = physicalInput.axes[GCInputTouchpadY]
-            touchpadButton = physicalInput.buttons[GCInputTouchpadButton]
-        } else {
-            // Fallback for iOS 14 - check various possible indices
-            touchpadX = physicalInput.axes[GCInputLeftX]
-            touchpadY = physicalInput.axes[GCInputLeftY]
-            touchpadButton = nil
-        }
-        
-        // Also check for mouse-like input (some controllers expose touchpad as mouse)
-        let mouseX = physicalInput.axes[GCInputMouseX]
-        let mouseY = physicalInput.axes[GCInputMouseY]
-        
-        var hasTouchpad = false
-        
-        // Set up touchpad axes if available
-        if let tx = touchpadX, let ty = touchpadY {
-            hasTouchpad = true
-            AppLogger.info("[GamepadManager] Touchpad axes detected, enabling bottom screen touch emulation")
-            
-            let touchpadHandler: GCControllerAxisInputValueChangedHandler = { [weak self] _, x, y in
-                // x and y are typically in range -1.0 to 1.0 for touchpad movement
-                // Convert to screen coordinates
-                let screenWidth = UIScreen.main.bounds.width
-                let screenHeight = UIScreen.main.bounds.height
-                
-                // Scale touchpad movement to screen size
-                let scaleX = screenWidth * 0.5  // Sensitivity
-                let scaleY = screenHeight * 0.5
-                
-                let newX = self?.touchpadLastPosition.x ?? 0 + CGFloat(x) * scaleX
-                let newY = self?.touchpadLastPosition.y ?? 0 + CGFloat(-y) * scaleY  // Invert Y
-                
-                // Clamp to screen bounds
-                let clampedX = max(0, min(screenWidth, newX))
-                let clampedY = max(0, min(screenHeight, newY))
-                
-                self?.touchpadLastPosition = CGPoint(x: clampedX, y: clampedY)
-                
-                // Send touch event to emulator
-                let pixelX = Float(clampedX * UIScreen.main.scale)
-                let pixelY = Float(clampedY * UIScreen.main.scale)
-                
-                if !(self?.touchpadActive ?? false) {
-                    az_touch_event(pixelX, pixelY, true)
-                    self?.touchpadActive = true
-                    AppLogger.controller("Touchpad touch START at (\(pixelX), \(pixelY))")
-                } else {
-                    az_touch_event(pixelX, pixelY, true)
-                    az_touch_moved(pixelX, pixelY)
-                }
-            }
-            
-            tx.valueChangedHandler = touchpadHandler
-            ty.valueChangedHandler = touchpadHandler
-        }
-        
-        // Set up touchpad button (click) if available
-        if let button = touchpadButton {
-            hasTouchpad = true
-            button.pressedChangedHandler = { [weak self] _, _, pressed in
-                guard let self = self else { return }
-                if pressed {
-                    // Touchpad click = touch down
-                    let pixelX = Float(self.touchpadLastPosition.x * UIScreen.main.scale)
-                    let pixelY = Float(self.touchpadLastPosition.y * UIScreen.main.scale)
-                    az_touch_event(pixelX, pixelY, true)
-                    self.touchpadActive = true
-                    AppLogger.controller("Touchpad click DOWN at (\(pixelX), \(pixelY))")
-                } else {
-                    // Touchpad release = touch up
-                    let pixelX = Float(self.touchpadLastPosition.x * UIScreen.main.scale)
-                    let pixelY = Float(self.touchpadLastPosition.y * UIScreen.main.scale)
-                    az_touch_event(pixelX, pixelY, false)
-                    self.touchpadActive = false
-                    AppLogger.controller("Touchpad click UP at (\(pixelX), \(pixelY))")
-                }
-            }
-        }
-        
-        // Fallback: mouse-like input (some controllers expose touchpad as mouse)
-        if !hasTouchpad, let mx = mouseX, let my = mouseY {
-            hasTouchpad = true
-            AppLogger.info("[GamepadManager] Mouse-like input detected, enabling touch emulation")
-            
-            let mouseHandler: GCControllerAxisInputValueChangedHandler = { [weak self] _, x, y in
-                let screenWidth = UIScreen.main.bounds.width
-                let screenHeight = UIScreen.main.bounds.height
-                
-                let scaleX = screenWidth * 0.5
-                let scaleY = screenHeight * 0.5
-                
-                let newX = self?.touchpadLastPosition.x ?? 0 + CGFloat(x) * scaleX
-                let newY = self?.touchpadLastPosition.y ?? 0 + CGFloat(-y) * scaleY
-                
-                let clampedX = max(0, min(screenWidth, newX))
-                let clampedY = max(0, min(screenHeight, newY))
-                
-                self?.touchpadLastPosition = CGPoint(x: clampedX, y: clampedY)
-                
-                let pixelX = Float(clampedX * UIScreen.main.scale)
-                let pixelY = Float(clampedY * UIScreen.main.scale)
-                
-                if !(self?.touchpadActive ?? false) {
-                    az_touch_event(pixelX, pixelY, true)
-                    self?.touchpadActive = true
-                } else {
-                    az_touch_event(pixelX, pixelY, true)
-                    az_touch_moved(pixelX, pixelY)
-                }
-            }
-            
-            mx.valueChangedHandler = mouseHandler
-            my.valueChangedHandler = mouseHandler
-        }
-        
-        if !hasTouchpad {
-            AppLogger.info("[GamepadManager] No touchpad or mouse input found on this controller")
-        }
+        // TODO: If Apple adds touchpad support to iOS GameController framework in the future,
+        // implement touchpad-to-touch mapping here
     }
 
 private func setupMicroGamepad(_ microGamepad: GCMicroGamepad) {
@@ -392,7 +270,7 @@ private func setupMicroGamepad(_ microGamepad: GCMicroGamepad) {
     /// Returns the 3DS button code if remapped, nil otherwise
     private func checkRemappedButton(for controllerButton: String, pressed: Bool) -> Int32? {
         let remapper = ControllerRemapper.shared
-        for (button3DS, mappedControllerButton) in remapper.mappings {
+        for (button3DS, mappedControllerButton) in remapper.allMappings {
             if mappedControllerButton == controllerButton {
                 AppLogger.info("[GamepadManager] Remapped \(controllerButton) -> \(button3DS.displayName) (\(pressed ? "pressed" : "released"))")
                 return button3DS.azButtonCode

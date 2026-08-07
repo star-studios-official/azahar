@@ -279,8 +279,9 @@ struct SettingsView: View {
                         Text(ExternalDisplayManager.shared.isExternalDisplayConnected ? "External Display Connected" : "No External Display Connected")
                             .foregroundStyle(ExternalDisplayManager.shared.isExternalDisplayConnected ? .primary : .secondary)
                         Spacer()
-                        if ExternalDisplayManager.shared.isExternalDisplayConnected {
-                            Text(ExternalDisplayManager.shared.externalScreen?.bounds.description ?? "")
+                        if ExternalDisplayManager.shared.isExternalDisplayConnected,
+                           let bounds = ExternalDisplayManager.shared.externalScreen?.bounds {
+                            Text("\(Int(bounds.width))×\(Int(bounds.height))")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
