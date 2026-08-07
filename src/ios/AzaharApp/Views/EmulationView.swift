@@ -143,7 +143,9 @@ struct EmulationView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
                 Spacer()
+                    .allowsHitTesting(false)  // Let touches pass through to game screen and controls below
             }
+            .allowsHitTesting(showOverlayButtons)  // Only intercept touches when buttons are visible
             
             // External display mode selector
             if showDisplayModeMenu {
@@ -177,6 +179,11 @@ struct EmulationView: View {
             AmiiboFilePicker(isPresented: $showAmiiboPicker) { url in
                 viewModel.loadAmiiboFile(url: url)
             }
+        }
+        .alert("External Display Connected", isPresented: $externalDisplayManager.showMirrorModeAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("External display detected via HDMI adapter. The game will render on your TV while you use touch controls on your iPhone.\n\nNote: Your adapter supports mirroring mode. For full dual-screen 3DS emulation (separate screens), you would need an adapter that supports Extended Display mode (like Apple's USB-C Digital AV Multiport Adapter).")
         }
         .onAppear {
             AppLogger.info("[EmulationView] onAppear - starting emulation")
@@ -574,8 +581,13 @@ struct TouchScreenOverlay: View {
         let pixelX = Float(location.x * scale)
         let pixelY = Float(location.y * scale)
         
+        // Log touch events for debugging
+        AppLogger.debug("[TouchScreenOverlay] Touch \(pressed ? "DOWN" : "UP") at screen coords: (\(location.x), \(location.y)), pixel coords: (\(pixelX), \(pixelY)), scale: \(scale)")
+        AppLogger.debug("[TouchScreenOverlay] Geometry size: \(geometry.size.width)x\(geometry.size.height)")
+        
         // Send to emulator - the C++ side will map to 3DS bottom screen coordinates
-        az_touch_event(pixelX, pixelY, pressed)
+        let result = az_touch_event(pixelX, pixelY, pressed)
+        AppLogger.debug("[TouchScreenOverlay] az_touch_event returned: \(result)")
         
         if pressed {
             az_touch_moved(pixelX, pixelY)

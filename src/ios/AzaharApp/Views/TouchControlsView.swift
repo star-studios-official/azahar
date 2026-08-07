@@ -390,11 +390,13 @@ struct ButtonImage: View {
                     .onChanged { _ in
                         if !isPressed {
                             isPressed = true
+                            AppLogger.debug("[TouchControl] Button \(name) (ID:\(button)) pressed")
                             az_button_event(button, true)
                         }
                     }
                     .onEnded { _ in
                         isPressed = false
+                        AppLogger.debug("[TouchControl] Button \(name) (ID:\(button)) released")
                         az_button_event(button, false)
                     }
             )
@@ -415,19 +417,19 @@ struct DPadView: View {
                 .frame(width: size, height: size)
             
             // Invisible hit zones for each direction
-            DPadHitZone(direction: .up, currentDirection: $currentDirection)
+            DPadHitZone(direction: .up, currentDirection: $currentDirection, size: size)
                 .frame(width: size * 0.33, height: size * 0.33)
                 .offset(y: -size * 0.33)
             
-            DPadHitZone(direction: .down, currentDirection: $currentDirection)
+            DPadHitZone(direction: .down, currentDirection: $currentDirection, size: size)
                 .frame(width: size * 0.33, height: size * 0.33)
                 .offset(y: size * 0.33)
             
-            DPadHitZone(direction: .left, currentDirection: $currentDirection)
+            DPadHitZone(direction: .left, currentDirection: $currentDirection, size: size)
                 .frame(width: size * 0.33, height: size * 0.33)
                 .offset(x: -size * 0.33)
             
-            DPadHitZone(direction: .right, currentDirection: $currentDirection)
+            DPadHitZone(direction: .right, currentDirection: $currentDirection, size: size)
                 .frame(width: size * 0.33, height: size * 0.33)
                 .offset(x: size * 0.33)
         }
@@ -461,6 +463,7 @@ enum DPadDirection: Hashable {
 struct DPadHitZone: View {
     let direction: DPadDirection
     @Binding var currentDirection: Set<DPadDirection>
+    let size: CGFloat
     
     var body: some View {
         Color.clear
@@ -470,11 +473,13 @@ struct DPadHitZone: View {
                     .onChanged { _ in
                         if !currentDirection.contains(direction) {
                             currentDirection.insert(direction)
+                            AppLogger.debug("[TouchControl] D-Pad \(direction) pressed (size: \(size))")
                             az_button_event(direction.button, true)
                         }
                     }
                     .onEnded { _ in
                         currentDirection.remove(direction)
+                        AppLogger.debug("[TouchControl] D-Pad \(direction) released")
                         az_button_event(direction.button, false)
                     }
             )

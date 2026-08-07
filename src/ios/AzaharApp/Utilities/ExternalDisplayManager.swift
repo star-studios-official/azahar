@@ -15,6 +15,7 @@ class ExternalDisplayManager: ObservableObject {
     @Published var externalScreen: UIScreen?
     @Published var externalWindow: UIWindow?
     @Published var displayMode: ExternalDisplayMode = .topScreenExternal
+    @Published var showMirrorModeAlert = false
     
     private var screenNotificationObserver: NSObjectProtocol?
     
@@ -189,7 +190,26 @@ class ExternalDisplayManager: ObservableObject {
             AppLogger.info("[ExternalDisplay] External screen scale: \(externalScreen.scale)")
             handleExternalDisplayConnected(externalScreen)
         } else {
-            AppLogger.info("[ExternalDisplay] No external display detected on initialization")
+            AppLogger.info("[ExternalDisplay] No true external display detected (UIScreen.screens.count == 1)")
+            
+            // Check if main screen is being mirrored (common with HDMI adapters)
+            // We can still use the mirrored screen for rendering!
+            if #available(iOS 13.0, *) {
+                if let mirroredScreen = UIScreen.main.mirrored {
+                    AppLogger.info("[ExternalDisplay] Found mirrored screen: \(mirroredScreen.bounds)")
+                    AppLogger.info("[ExternalDisplay] Mirrored screen scale: \(mirroredScreen.scale)")
+                    AppLogger.info("[ExternalDisplay] Attempting to use mirrored screen for video output...")
+                    
+                    // Treat the mirrored screen as an external display
+                    // This allows HDMI adapters to work for full-screen video output
+                    handleExternalDisplayConnected(mirroredScreen)
+                    
+                    AppLogger.info("[ExternalDisplay] Successfully initialized mirrored screen rendering")
+                    AppLogger.info("[ExternalDisplay] Note: This is a mirrored display (HDMI adapter), not true dual-screen")
+                } else {
+                    AppLogger.info("[ExternalDisplay] Main screen is not mirrored - no external display connected")
+                }
+            }
         }
     }
     
