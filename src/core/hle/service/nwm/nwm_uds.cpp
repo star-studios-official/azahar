@@ -1041,13 +1041,11 @@ Result NWM_UDS::BeginHostingNetwork(std::span<const u8> network_info_buffer,
     
     // Get game title for display
     std::string game_title = "3DS Game";
-    if (auto app_loader = system.GetAppLoader().lock()) {
-        std::string title;
-        // ReadTitle returns Loader::ResultStatus, not Service::NWM::ResultStatus
-        const auto read_result = app_loader->ReadTitle(title);
-        if (read_result == ::Loader::ResultStatus::Success) {
-            game_title = title;
-        }
+    std::string title;
+    // ReadTitle returns Loader::ResultStatus, not Service::NWM::ResultStatus
+    const auto read_result = system.GetAppLoader().ReadTitle(title);
+    if (read_result == ::Loader::ResultStatus::Success) {
+        game_title = title;
     }
     
     // Start hosting via iOS Multipeer backend
