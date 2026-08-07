@@ -531,6 +531,7 @@ private:
         u32 sharedmem_size, const NodeInfo& node, u16 version,
         std::shared_ptr<Kernel::SharedMemory> sharedmem);
 
+    void CheckSpoofFriendCodeSeed(Kernel::HLERequestContext& ctx, NodeInfo& node);
     void ShutdownHLE();
     Common::Expected<int, ResultStatus> PullPacketHLE(u32 bind_node_id, u32 max_out_buff_size,
                                                       u32 max_out_buff_size_aligned,
