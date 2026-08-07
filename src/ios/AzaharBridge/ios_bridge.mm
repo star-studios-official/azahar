@@ -1956,7 +1956,7 @@ bool az_nwm_has_received_packets() {
 }
 
 // Pull a received packet (returns nullptr if no packets available)
-std::vector<u8>* az_nwm_pull_packet() {
+void* az_nwm_pull_packet() {
     std::lock_guard<std::mutex> lock(g_nwm_packet_mutex);
     if (g_nwm_received_packets.empty()) {
         return nullptr;
@@ -1966,7 +1966,7 @@ std::vector<u8>* az_nwm_pull_packet() {
     packet_buffer = std::move(g_nwm_received_packets.front());
     g_nwm_received_packets.pop();
     
-    return &packet_buffer;
+    return static_cast<void*>(&packet_buffer);
 }
 
 // ---------------------------------------------------------------------------
