@@ -495,17 +495,6 @@ private:
     void SetProbeResponseParam(Kernel::HLERequestContext& ctx);
 
     /**
-     * NWM_UDS::Flush service function.
-     * Flushes any pending data in the send/receive buffers.
-     *  Inputs:
-     *      0 : Command header.
-     *  Outputs:
-     *      0 : Return header
-     *      1 : Result of function, 0 on success, otherwise error code
-     */
-    void Flush(Kernel::HLERequestContext& ctx);
-
-    /**
      * NWM_UDS::ScanOnConnection service function.
      * Initiates a scan when a connection is established.
      *  Inputs:

@@ -1687,24 +1687,6 @@ void NWM_UDS::SetProbeResponseParam(Kernel::HLERequestContext& ctx) {
 }
 
 /**
- * NWM_UDS::Flush service function.
- * Flushes any pending data in the send/receive buffers.
- *  Inputs:
- *      0 : Command header.
- *  Outputs:
- *      0 : Return header
- *      1 : Result of function, 0 on success, otherwise error code
- */
-void NWM_UDS::Flush(Kernel::HLERequestContext& ctx) {
-    IPC::RequestParser rp(ctx);
-
-    LOG_WARNING(Service_NWM, "Flush: called (stubbed)");
-
-    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
-    rb.Push(ResultSuccess);
-}
-
-/**
  * NWM_UDS::ScanOnConnection service function.
  * Initiates a scan when a connection is established.
  *  Inputs:
