@@ -461,6 +461,62 @@ private:
     void EjectSpectators(Kernel::HLERequestContext& ctx);
 
     /**
+     * NWM_UDS::SetMaxSendDelay service function.
+     * Sets the maximum send delay for packets.
+     *  Inputs:
+     *      1 : u16 Max send delay in milliseconds.
+     *  Outputs:
+     *      0 : Return header
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void SetMaxSendDelay(Kernel::HLERequestContext& ctx);
+
+    /**
+     * NWM_UDS::Flush service function.
+     * Flushes any pending data in the send/receive buffers.
+     *  Inputs:
+     *      0 : Command header.
+     *  Outputs:
+     *      0 : Return header
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void Flush(Kernel::HLERequestContext& ctx);
+
+    /**
+     * NWM_UDS::SetProbeResponseParam service function.
+     * Sets the probe response parameters for the wireless network.
+     *  Inputs:
+     *      1 : u32 Parameter 1 (probe response IE data)
+     *      2 : u32 Parameter 2 (probe response IE length)
+     *  Outputs:
+     *      0 : Return header
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void SetProbeResponseParam(Kernel::HLERequestContext& ctx);
+
+    /**
+     * NWM_UDS::Flush service function.
+     * Flushes any pending data in the send/receive buffers.
+     *  Inputs:
+     *      0 : Command header.
+     *  Outputs:
+     *      0 : Return header
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void Flush(Kernel::HLERequestContext& ctx);
+
+    /**
+     * NWM_UDS::ScanOnConnection service function.
+     * Initiates a scan when a connection is established.
+     *  Inputs:
+     *      0 : Command header.
+     *  Outputs:
+     *      0 : Return header
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void ScanOnConnection(Kernel::HLERequestContext& ctx);
+
+    /**
      * NWM_UDS::DecryptBeaconData service function.
      * Decrypts the encrypted data tags contained in the 802.11 beacons.
      *  Inputs:
@@ -477,7 +533,8 @@ private:
      *      1 : Result of function, 0 on success, otherwise error code
      *      2, 3: output buffer return descriptor & ptr
      */
-    void DecryptBeaconData(Kernel::HLERequestContext& ctx);
+    /**
+     * NWM_UDS::DecryptBeaconData service function.
 
     void CheckSpoofFriendCodeSeed(Kernel::HLERequestContext& ctx, NodeInfo& node);
 

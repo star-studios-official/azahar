@@ -635,6 +635,46 @@ void az_log_message(int level, const char* message);
 /// level: -1=All(Trace), 0=Trace, 1=Debug, 2=Info, 3=Warning, 4=Error, 5=Critical
 void az_apply_log_filter_level(int level);
 
+// ---------------------------------------------------------------------------
+// NWM Local Wireless (MultipeerConnectivity) Bridge
+// ---------------------------------------------------------------------------
+
+/// Initialize MultipeerConnectivity manager for local wireless
+void az_nwm_init_multipeer(void);
+
+/// Start hosting a local wireless network
+/// @param room_name Display name for the room
+/// @param title_id Game title ID (hex string)
+/// @param game_title Human-readable game title
+void az_nwm_start_hosting(const char* room_name, const char* title_id, const char* game_title);
+
+/// Start browsing for available local wireless networks
+void az_nwm_start_browsing(void);
+
+/// Connect to a specific peer by name
+void az_nwm_connect_to_peer(const char* peer_name);
+
+/// Send packet to all connected peers
+/// @param data Packet data
+/// @param length Packet length in bytes
+void az_nwm_send_packet(const uint8_t* data, size_t length);
+
+/// Stop all local wireless sessions
+void az_nwm_stop_all(void);
+
+/// Check if there are received packets available
+bool az_nwm_has_received_packets(void);
+
+/// Pull a received packet (returns nullptr if no packets available)
+/// @return Pointer to packet data (valid until next call to az_nwm_pull_packet)
+void* az_nwm_pull_packet(void);
+
+// Callbacks from Swift to C++ (implemented in ios_bridge.mm)
+void az_nwm_hosting_started(void);
+void az_nwm_peer_connected(const char* peer_name);
+void az_nwm_peer_disconnected(const char* peer_name);
+void az_nwm_receive_packet(const void* data, size_t length);
+
 #ifdef __cplusplus
 }
 #endif

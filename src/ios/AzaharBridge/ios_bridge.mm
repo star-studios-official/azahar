@@ -1823,3 +1823,191 @@ void az_apply_log_filter_level(int level) {
     filter.ParseFilterString(filter_string);
     Common::Log::SetGlobalFilter(filter);
 }
+
+// ---------------------------------------------------------------------------
+// NWM Local Wireless (MultipeerConnectivity) Bridge
+// ---------------------------------------------------------------------------
+
+#import <MultipeerConnectivity/MultipeerConnectivity.h>
+
+// Forward declaration - LocalPlayManager is defined in Swift
+@class LocalPlayManager;
+
+static void* g_multipeer_manager = nullptr;
+
+// Queue for received NWM packets
+static std::queue<std::vector<u8>> g_nwm_received_packets;
+static std::mutex g_nwm_packet_mutex;
+
+// Initialize MultipeerConnectivity manager
+void az_nwm_init_multipeer() {
+    if (g_multipeer_manager == nullptr) {
+        // LocalPlayManager.shared is a Swift singleton
+        // We get it via the Objective-C runtime
+        Class LocalPlayManagerClass = NSClassFromString(@"LocalPlayManager");
+        if (LocalPlayManagerClass) {
+            id sharedInstance = [LocalPlayManagerClass performSelector:@selector(shared)];
+            g_multipeer_manager = (__bridge_retained void*)sharedInstance;
+            LOG_INFO(Frontend, "[NWM] MultipeerConnectivity initialized");
+        } else {
+            LOG_ERROR(Frontend, "[NWM] Failed to find LocalPlayManager class");
+        }
+    }
+}
+
+// Start hosting a local wireless network
+void az_nwm_start_hosting(const char* room_name, const char* title_id, const char* game_title) {
+    if (!g_multipeer_manager) {
+        az_nwm_init_multipeer();
+    }
+    
+    if (g_multipeer_manager) {
+        @autoreleasepool {
+            id manager = (__bridge id)g_multipeer_manager;
+            NSString* roomName = [NSString stringWithUTF8String:room_name];
+            NSString* titleId = [NSString stringWithUTF8String:title_id];
+            NSString* gameTitle = [NSString stringWithUTF8String:game_title];
+            
+            SEL selector = NSSelectorFromString(@"startHostingWithRoomName:titleId:gameTitle:");
+            NSMethodSignature* signature = [manager methodSignatureForSelector:selector];
+            NSInvocation* invocation = [NSInvocation invocationWithMethodSignature:signature];
+            [invocation setSelector:selector];
+            [invocation setTarget:manager];
+            [invocation setArgument:&roomName atIndex:2];
+            [invocation setArgument:&titleId atIndex:3];
+            [invocation setArgument:&gameTitle atIndex:4];
+            [invocation invoke];
+            
+            LOG_INFO(Frontend, "[NWM] Started hosting: {} | TitleID: {}", room_name, title_id);
+        }
+    }
+}
+
+// Start browsing for local wireless networks
+void az_nwm_start_browsing() {
+    if (!g_multipeer_manager) {
+        az_nwm_init_multipeer();
+    }
+    
+    if (g_multipeer_manager) {
+        @autoreleasepool {
+            id manager = (__bridge id)g_multipeer_manager;
+            [manager performSelector:@selector(startBrowsing)];
+            LOG_INFO(Frontend, "[NWM] Started browsing for local wireless sessions");
+        }
+    }
+}
+
+// Connect to a specific peer
+void az_nwm_connect_to_peer(const char* peer_name) {
+    if (g_multipeer_manager) {
+        @autoreleasepool {
+            // Implementation would require passing MCPeerID
+            LOG_INFO(Frontend, "[NWM] Connecting to peer: {}", peer_name);
+        }
+    }
+}
+
+// Send packet to all connected peers
+void az_nwm_send_packet(const uint8_t* data, size_t length) {
+    if (!g_multipeer_manager || !data || length == 0) {
+        return;
+    }
+    
+    @autoreleasepool {
+        id manager = (__bridge id)g_multipeer_manager;
+        NSData* packet = [NSData dataWithBytes:data length:length];
+        
+        SEL selector = NSSelectorFromString(@"sendPacketWithData:");
+        if ([manager respondsToSelector:selector]) {
+            NSMethodSignature* signature = [manager methodSignatureForSelector:selector];
+            NSInvocation* invocation = [NSInvocation invocationWithMethodSignature:signature];
+            [invocation setSelector:selector];
+            [invocation setTarget:manager];
+            [invocation setArgument:&packet atIndex:2];
+            [invocation invoke];
+            
+            LOG_DEBUG(Frontend, "[NWM] Sent packet: {} bytes", length);
+        }
+    }
+}
+
+// Stop all local wireless sessions
+void az_nwm_stop_all() {
+    if (g_multipeer_manager) {
+        @autoreleasepool {
+            id manager = (__bridge id)g_multipeer_manager;
+            [manager performSelector:@selector(stopAll)];
+            LOG_INFO(Frontend, "[NWM] Stopped all local wireless sessions");
+        }
+        
+        // Clear packet queue
+        std::lock_guard<std::mutex> lock(g_nwm_packet_mutex);
+        while (!g_nwm_received_packets.empty()) {
+            g_nwm_received_packets.pop();
+        }
+    }
+}
+
+// Check if there are received packets available
+bool az_nwm_has_received_packets() {
+    std::lock_guard<std::mutex> lock(g_nwm_packet_mutex);
+    return !g_nwm_received_packets.empty();
+}
+
+// Pull a received packet (returns nullptr if no packets available)
+std::vector<u8>* az_nwm_pull_packet() {
+    std::lock_guard<std::mutex> lock(g_nwm_packet_mutex);
+    if (g_nwm_received_packets.empty()) {
+        return nullptr;
+    }
+    
+    static std::vector<u8> packet_buffer;
+    packet_buffer = std::move(g_nwm_received_packets.front());
+    g_nwm_received_packets.pop();
+    
+    return &packet_buffer;
+}
+
+// ---------------------------------------------------------------------------
+// Callbacks from Swift to C++
+// These are called by LocalPlayManager when events occur
+// ---------------------------------------------------------------------------
+
+extern "C" {
+
+// Called when hosting starts successfully
+void az_nwm_hosting_started() {
+    LOG_INFO(Frontend, "[NWM] Hosting started callback received");
+    // Could trigger NWM service event here
+}
+
+// Called when a peer connects
+void az_nwm_peer_connected(const char* peer_name) {
+    LOG_INFO(Frontend, "[NWM] Peer connected: {}", peer_name);
+    // Could update NWM service connection status
+}
+
+// Called when a peer disconnects
+void az_nwm_peer_disconnected(const char* peer_name) {
+    LOG_INFO(Frontend, "[NWM] Peer disconnected: {}", peer_name);
+    // Could update NWM service connection status
+}
+
+// Called when a packet is received from a peer
+void az_nwm_receive_packet(const void* data, size_t length) {
+    if (!data || length == 0) {
+        return;
+    }
+    
+    // Queue the received packet
+    std::lock_guard<std::mutex> lock(g_nwm_packet_mutex);
+    std::vector<u8> packet(static_cast<const u8*>(data), 
+                          static_cast<const u8*>(data) + length);
+    g_nwm_received_packets.push(std::move(packet));
+    
+    LOG_DEBUG(Frontend, "[NWM] Packet received: {} bytes (queue size: {})", 
+              length, g_nwm_received_packets.size());
+}
+
+} // extern "C"

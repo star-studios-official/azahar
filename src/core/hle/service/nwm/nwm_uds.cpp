@@ -1618,6 +1618,110 @@ void NWM_UDS::EjectSpectators(Kernel::HLERequestContext& ctx) {
     rb.Push(ResultSuccess);
 }
 
+void NWM_UDS::EjectSpectators(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+
+    LOG_WARNING(Service_NWM, "(STUBBED) called");
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+
+    rb.Push(ResultSuccess);
+}
+
+/**
+ * NWM_UDS::SetMaxSendDelay service function.
+ * Sets the maximum send delay for packets.
+ *  Inputs:
+ *      1 : u16 Max send delay in milliseconds.
+ *  Outputs:
+ *      0 : Return header
+ *      1 : Result of function, 0 on success, otherwise error code
+ */
+void NWM_UDS::SetMaxSendDelay(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    u16 max_send_delay = rp.Pop<u16>();
+
+    LOG_WARNING(Service_NWM, "SetMaxSendDelay: max_send_delay={} ms (stubbed)", max_send_delay);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
+/**
+ * NWM_UDS::Flush service function.
+ * Flushes any pending data in the send/receive buffers.
+ *  Inputs:
+ *      0 : Command header.
+ *  Outputs:
+ *      0 : Return header
+ *      1 : Result of function, 0 on success, otherwise error code
+ */
+void NWM_UDS::Flush(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+
+    LOG_WARNING(Service_NWM, "Flush: called (stubbed)");
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
+/**
+ * NWM_UDS::SetProbeResponseParam service function.
+ * Sets the probe response parameters for the wireless network.
+ *  Inputs:
+ *      1 : u32 Parameter 1 (probe response IE data)
+ *      2 : u32 Parameter 2 (probe response IE length)
+ *  Outputs:
+ *      0 : Return header
+ *      1 : Result of function, 0 on success, otherwise error code
+ */
+void NWM_UDS::SetProbeResponseParam(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx, 0x21, 2, 0);
+    u32 param1 = rp.Pop<u32>();
+    u32 param2 = rp.Pop<u32>();
+
+    LOG_WARNING(Service_NWM, "SetProbeResponseParam: param1={:#x}, param2={:#x} (stubbed)", param1, param2);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
+/**
+ * NWM_UDS::Flush service function.
+ * Flushes any pending data in the send/receive buffers.
+ *  Inputs:
+ *      0 : Command header.
+ *  Outputs:
+ *      0 : Return header
+ *      1 : Result of function, 0 on success, otherwise error code
+ */
+void NWM_UDS::Flush(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+
+    LOG_WARNING(Service_NWM, "Flush: called (stubbed)");
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
+/**
+ * NWM_UDS::ScanOnConnection service function.
+ * Initiates a scan when a connection is established.
+ *  Inputs:
+ *      0 : Command header.
+ *  Outputs:
+ *      0 : Return header
+ *      1 : Result of function, 0 on success, otherwise error code
+ */
+void NWM_UDS::ScanOnConnection(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+
+    LOG_WARNING(Service_NWM, "ScanOnConnection: called (stubbed)");
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
 // Sends a 802.11 beacon frame with information about the current network.
 void NWM_UDS::BeaconBroadcastCallback(std::uintptr_t user_data, s64 cycles_late) {
     // Don't do anything if we're not actually hosting a network
@@ -1682,16 +1786,16 @@ NWM_UDS::NWM_UDS(Core::System& system) : ServiceFramework("nwm::UDS"), system(sy
         {0x0012, &NWM_UDS::Bind, "Bind"},
         {0x0013, &NWM_UDS::Unbind, "Unbind"},
         {0x0014, &NWM_UDS::PullPacket, "PullPacket"},
-        {0x0015, nullptr, "SetMaxSendDelay"},
+        {0x0015, &NWM_UDS::SetMaxSendDelay, "SetMaxSendDelay"},
         {0x0017, &NWM_UDS::SendTo, "SendTo"},
         {0x001A, &NWM_UDS::GetChannel, "GetChannel"},
         {0x001B, &NWM_UDS::InitializeWithVersion, "InitializeWithVersion"},
         {0x001D, &NWM_UDS::BeginHostingNetwork, "BeginHostingNetwork"},
         {0x001E, &NWM_UDS::ConnectToNetwork, "ConnectToNetwork"},
         {0x001F, &NWM_UDS::DecryptBeaconData, "DecryptBeaconData"},
-        {0x0020, nullptr, "Flush"},
-        {0x0021, nullptr, "SetProbeResponseParam"},
-        {0x0022, nullptr, "ScanOnConnection"},
+        {0x0020, &NWM_UDS::Flush, "Flush"},
+        {0x0021, &NWM_UDS::SetProbeResponseParam, "SetProbeResponseParam"},
+        {0x0022, &NWM_UDS::ScanOnConnection, "ScanOnConnection"},
         // clang-format on
     };
     connection_status_event =
@@ -1706,11 +1810,13 @@ NWM_UDS::NWM_UDS(Core::System& system) : ServiceFramework("nwm::UDS"), system(sy
 
     system.Kernel().GetSharedPageHandler().SetMacAddress(GetMacAddress());
 
+    // The network room may not be initialized yet - this is expected during early startup.
+    // The room member will be bound when the network is initialized.
     if (auto room_member = Network::GetRoomMember().lock()) {
         wifi_packet_received = room_member->BindOnWifiPacketReceived(
             [this](const Network::WifiPacket& packet) { OnWifiPacketReceived(packet); });
     } else {
-        LOG_ERROR(Service_NWM, "Network isn't initalized");
+        LOG_WARNING(Service_NWM, "Network room not yet initialized, will bind when available");
     }
 }
 

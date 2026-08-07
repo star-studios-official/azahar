@@ -62,6 +62,8 @@ set_target_properties(azahar_ios PROPERTIES
 set(AZAHAR_SWIFT_SOURCES
     AzaharApp/AzaharApp.swift
     AzaharApp/AppDelegate.swift
+    AzaharApp/SceneDelegate.swift
+    AzaharApp/ExternalSceneDelegate.swift
     AzaharApp/AzaharBridge.swift
     AzaharApp/Models/Game.swift
     AzaharApp/Models/WhatsNewEntry.swift
@@ -104,6 +106,7 @@ set(AZAHAR_SWIFT_SOURCES
     AzaharApp/Utilities/JITEnableContext.swift
     AzaharApp/Utilities/EntitlementChecker.swift
     AzaharApp/Utilities/ExternalDisplayManager.swift
+    AzaharApp/Utilities/LocalPlayManager.swift
     AzaharApp/Utilities/AppLogger.swift
 )
 
