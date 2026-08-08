@@ -1889,7 +1889,7 @@ void az_nwm_init_multipeer() {
             id sharedInstance = [LocalPlayManagerClass performSelector:@selector(shared)];
             g_multipeer_manager = (__bridge_retained void*)sharedInstance;
             LOG_INFO(Frontend, "[NWM] MultipeerConnectivity initialized with class: {}",
-                    [[NSStringFromClass(LocalPlayManagerClass) UTF8String]]);
+                    [NSStringFromClass(LocalPlayManagerClass) UTF8String]);
         } else {
             LOG_ERROR(Frontend, "[NWM] Failed to find LocalPlayManager class - tried Azahar.LocalPlayManager, LocalPlayManager, azahar_ios_app.LocalPlayManager");
         }
