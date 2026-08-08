@@ -1057,7 +1057,7 @@ Result NWM_UDS::BeginHostingNetwork(std::span<const u8> network_info_buffer,
     
     // Start hosting via iOS Multipeer backend
     char room_name[64];
-    snprintf(room_name, sizeof(room_name), "Azahar_%08llX", system.Kernel().GetCurrentProcess()->codeset->program_id);
+    snprintf(room_name, sizeof(room_name), "Azahar_%016llX", system.Kernel().GetCurrentProcess()->codeset->program_id);
     
     char title_id_str[17];
     snprintf(title_id_str, sizeof(title_id_str), "%016llX", system.Kernel().GetCurrentProcess()->codeset->program_id);

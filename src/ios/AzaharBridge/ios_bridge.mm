@@ -1872,13 +1872,26 @@ void az_nwm_init_multipeer() {
     if (g_multipeer_manager == nullptr) {
         // LocalPlayManager.shared is a Swift singleton
         // We get it via the Objective-C runtime
-        Class LocalPlayManagerClass = NSClassFromString(@"LocalPlayManager");
+        // Swift classes need module prefix when accessed from ObjC
+        Class LocalPlayManagerClass = NSClassFromString(@"Azahar.LocalPlayManager");
+
+        // Fallback: try without module prefix (older Swift versions)
+        if (!LocalPlayManagerClass) {
+            LocalPlayManagerClass = NSClassFromString(@"LocalPlayManager");
+        }
+
+        // Fallback: try with app target name prefix
+        if (!LocalPlayManagerClass) {
+            LocalPlayManagerClass = NSClassFromString(@"azahar_ios_app.LocalPlayManager");
+        }
+
         if (LocalPlayManagerClass) {
             id sharedInstance = [LocalPlayManagerClass performSelector:@selector(shared)];
             g_multipeer_manager = (__bridge_retained void*)sharedInstance;
-            LOG_INFO(Frontend, "[NWM] MultipeerConnectivity initialized");
+            LOG_INFO(Frontend, "[NWM] MultipeerConnectivity initialized with class: {}",
+                    [[NSStringFromClass(LocalPlayManagerClass) UTF8String]]);
         } else {
-            LOG_ERROR(Frontend, "[NWM] Failed to find LocalPlayManager class");
+            LOG_ERROR(Frontend, "[NWM] Failed to find LocalPlayManager class - tried Azahar.LocalPlayManager, LocalPlayManager, azahar_ios_app.LocalPlayManager");
         }
     }
 }

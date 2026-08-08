@@ -26,6 +26,12 @@
     <string>Azahar needs camera access to emulate the 3DS cameras.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Azahar needs microphone access to emulate the 3DS microphone.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>Azahar needs local network access for local multiplayer via MultipeerConnectivity.</string>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_azahar-3ds._tcp</string>
+    </array>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>

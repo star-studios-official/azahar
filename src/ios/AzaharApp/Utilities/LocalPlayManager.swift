@@ -7,6 +7,7 @@ import Foundation
 
 /// Local Play Manager - Handles NWM::UDS emulation via iOS MultipeerConnectivity
 /// Enables local wireless multiplayer between 2 or more iPhones over WiFi/Bluetooth
+@objc(LocalPlayManager)
 class LocalPlayManager: NSObject, ObservableObject {
     static let shared = LocalPlayManager()
     
@@ -35,7 +36,7 @@ class LocalPlayManager: NSObject, ObservableObject {
     
     // MARK: - Host (Create Local Wireless Network)
     
-    func startHosting(roomName: String, titleId: String, gameTitle: String) {
+    @objc func startHosting(roomName: String, titleId: String, gameTitle: String) {
         stopAll() // Clean up previous sessions
         
         // Create session with no encryption (for performance)
@@ -68,7 +69,7 @@ class LocalPlayManager: NSObject, ObservableObject {
     
     // MARK: - Client (Join Local Wireless Network)
     
-    func startBrowsing() {
+    @objc func startBrowsing() {
         stopAll()
         
         // Create session
@@ -83,7 +84,7 @@ class LocalPlayManager: NSObject, ObservableObject {
         AppLogger.info("[LocalPlay] Started browsing for local wireless sessions")
     }
     
-    func connectToPeer(_ peerID: MCPeerID) {
+    @objc func connectToPeer(_ peerID: MCPeerID) {
         guard let browser = browser, let session = session else {
             AppLogger.warning("LocalPlay", message: "Cannot connect - browser or session not initialized")
             return
@@ -96,7 +97,7 @@ class LocalPlayManager: NSObject, ObservableObject {
     
     // MARK: - Send/Receive Packets
     
-    func sendPacket(data: Data) {
+    @objc func sendPacket(data: Data) {
         guard let session = session, !session.connectedPeers.isEmpty else {
             AppLogger.warning("LocalPlay", message: "No connected peers to send packet")
             return
@@ -110,20 +111,20 @@ class LocalPlayManager: NSObject, ObservableObject {
         }
     }
     
-    func receivePacket() -> Data? {
+    @objc func receivePacket() -> Data? {
         return packetQueue.sync {
             guard !receivedPackets.isEmpty else { return nil }
             return receivedPackets.removeFirst()
         }
     }
     
-    func hasReceivedPackets() -> Bool {
+    @objc func hasReceivedPackets() -> Bool {
         return packetQueue.sync {
             !receivedPackets.isEmpty
         }
     }
     
-    func stopAll() {
+    @objc func stopAll() {
         advertiser?.stopAdvertisingPeer()
         browser?.stopBrowsingForPeers()
         session?.disconnect()
