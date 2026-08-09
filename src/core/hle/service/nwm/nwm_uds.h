@@ -41,6 +41,10 @@ class DLP_SRVR;
 
 namespace Service::NWM {
 
+#ifdef CITRA_IOS
+class NWMMultipeerBackend;
+#endif
+
 enum class ResultStatus {
     ResultSuccess = 0,
     BindError_ArgsZero,
@@ -687,6 +691,11 @@ private:
 
     // List of the last <MaxBeaconFrames> beacons received from the network.
     std::list<Network::WifiPacket> received_beacons;
+
+#ifdef CITRA_IOS
+    // iOS MultipeerConnectivity backend for local wireless play
+    std::unique_ptr<NWMMultipeerBackend> multipeer_backend;
+#endif
 
     template <class Archive>
     void serialize(Archive& ar, const unsigned int);

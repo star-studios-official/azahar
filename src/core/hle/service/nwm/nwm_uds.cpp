@@ -29,10 +29,7 @@
 #include "core/memory.h"
 
 #ifdef CITRA_IOS
-// iOS MultipeerConnectivity bridge function (implemented in ios_bridge.mm)
-extern "C" {
-void az_nwm_start_hosting(const char* room_name, const char* title_id, const char* game_title);
-}
+#include "core/hle/service/nwm/nwm_multipeer_backend.h"
 #endif
 
 SERIALIZE_EXPORT_IMPL(Service::NWM::NWM_UDS)
@@ -677,6 +674,14 @@ void NWM_UDS::RecvBeaconBroadcastData(Kernel::HLERequestContext& ctx) {
     Kernel::MappedBuffer& out_buffer = rp.PopMappedBuffer();
     ASSERT(out_buffer.GetSize() == out_buffer_size);
 
+#ifdef CITRA_IOS
+    // On iOS, start browsing for MultipeerConnectivity sessions when scanning
+    if (multipeer_backend && connection_status.status == NetworkStatus::NotConnected) {
+        multipeer_backend->StartBrowsing();
+        LOG_INFO(Service_NWM, "[LocalMP] iOS MultipeerConnectivity browsing started");
+    }
+#endif
+
     std::size_t cur_buffer_size = sizeof(BeaconDataReplyHeader);
 
     auto beacons = GetReceivedBeacons(mac_address);
@@ -1049,21 +1054,23 @@ Result NWM_UDS::BeginHostingNetwork(std::span<const u8> network_info_buffer,
     // Get game title for display
     std::string game_title = "3DS Game";
     std::string title;
-    // ReadTitle returns Loader::ResultStatus, not Service::NWM::ResultStatus
     const auto read_result = system.GetAppLoader().ReadTitle(title);
     if (read_result == ::Loader::ResultStatus::Success) {
         game_title = title;
     }
     
-    // Start hosting via iOS Multipeer backend
+    // Get the title ID
+    const u64 title_id = system.Kernel().GetCurrentProcess()->codeset->program_id;
+    
+    // Create room name with title ID
     char room_name[64];
-    snprintf(room_name, sizeof(room_name), "Azahar_%016llX", system.Kernel().GetCurrentProcess()->codeset->program_id);
+    snprintf(room_name, sizeof(room_name), "Azahar_%016llX", title_id);
     
-    char title_id_str[17];
-    snprintf(title_id_str, sizeof(title_id_str), "%016llX", system.Kernel().GetCurrentProcess()->codeset->program_id);
-    az_nwm_start_hosting(room_name, title_id_str, game_title.c_str());
-    
-    LOG_INFO(Service_NWM, "[LocalMP] iOS MultipeerConnectivity host started: {}", room_name);
+    // Start hosting via MultipeerBackend
+    if (multipeer_backend) {
+        multipeer_backend->StartHosting(room_name, title_id, game_title);
+        LOG_INFO(Service_NWM, "[LocalMP] iOS MultipeerConnectivity host started: {}", room_name);
+    }
 #endif
 
     LOG_INFO(Service_NWM, "[LocalMP] Host network started successfully, broadcasting beacons");
@@ -1865,6 +1872,13 @@ NWM_UDS::NWM_UDS(Core::System& system) : ServiceFramework("nwm::UDS"), system(sy
         });
 
     system.Kernel().GetSharedPageHandler().SetMacAddress(GetMacAddress());
+
+#ifdef CITRA_IOS
+    // Initialize iOS MultipeerConnectivity backend
+    multipeer_backend = std::make_unique<NWMMultipeerBackend>();
+    multipeer_backend->Initialize();
+    LOG_INFO(Service_NWM, "[LocalMP] iOS MultipeerConnectivity backend initialized");
+#endif
 
     // The network room may not be initialized yet - this is expected during early startup.
     // The room member will be bound when the network is initialized.
