@@ -9,7 +9,11 @@ import Foundation
 /// Enables local wireless multiplayer between 2 or more iPhones over WiFi/Bluetooth
 @objc(LocalPlayManager)
 class LocalPlayManager: NSObject, ObservableObject {
-    static let shared = LocalPlayManager()
+    private static let _shared = LocalPlayManager()
+
+    @objc class func shared() -> LocalPlayManager {
+        return _shared
+    }
     
     @Published var isHosting = false
     @Published var isConnected = false
