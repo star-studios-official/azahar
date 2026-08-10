@@ -515,6 +515,7 @@ struct Values {
     Setting<s64> init_ticks_override{0, Keys::init_ticks_override};
     Setting<bool> plugin_loader_enabled{false, Keys::plugin_loader};
     Setting<bool> allow_plugin_loader{true, Keys::allow_plugin_loader};
+    Setting<bool> enable_multipeer_connectivity{true, "enable_multipeer_connectivity"};
     Setting<u16> steps_per_hour{0, Keys::steps_per_hour};
     Setting<bool> apply_region_free_patch{true, Keys::apply_region_free_patch};
 
