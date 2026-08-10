@@ -1914,7 +1914,7 @@ void az_nwm_start_hosting(const char* room_name, const char* title_id, const cha
             
             if (![manager respondsToSelector:selector]) {
                 LOG_ERROR(Frontend, "[NWM] LocalPlayManager doesn't respond to startHostingWithRoomName:titleId:gameTitle:");
-                LOG_ERROR(Frontend, "[NWM] Manager class: {}", [[manager className] UTF8String]);
+                LOG_ERROR(Frontend, "[NWM] Manager class: {}", [NSStringFromClass([manager class]) UTF8String]);
                 return;
             }
             
@@ -1953,7 +1953,7 @@ void az_nwm_start_browsing() {
             
             if (![manager respondsToSelector:selector]) {
                 LOG_ERROR(Frontend, "[NWM] LocalPlayManager doesn't respond to startBrowsing");
-                LOG_ERROR(Frontend, "[NWM] Manager class: {}", [[manager className] UTF8String]);
+                LOG_ERROR(Frontend, "[NWM] Manager class: {}", [NSStringFromClass([manager class]) UTF8String]);
                 return;
             }
             
