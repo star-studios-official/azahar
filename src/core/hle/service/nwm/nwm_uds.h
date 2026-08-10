@@ -623,6 +623,18 @@ private:
 
     boost::optional<Network::MacAddress> GetNodeMacAddress(u16 dest_node_id, u8 flags);
 
+#ifdef CITRA_IOS
+    // Public methods for iOS bridge to inject discovered peers as beacons
+    void InjectPeerBeacon(const std::string& peer_name, const std::string& room_name,
+                          const std::string& title_id_str, const std::string& game_title);
+    
+    // Remove beacon for lost peer
+    void RemovePeerBeacon(const std::string& peer_name);
+    
+    // Get peer name from MAC address (for connection)
+    std::string GetPeerNameFromMac(const MacAddress& mac);
+#endif
+
     // Event that is signaled every time the connection status changes.
     std::shared_ptr<Kernel::Event> connection_status_event;
 
@@ -673,7 +685,6 @@ private:
         bool spec;
         u16 node_id;
 
-    private:
         template <class Archive>
         void serialize(Archive& ar, const unsigned int) {
             ar & connected;
@@ -709,16 +720,6 @@ private:
     
     // Mapping of fake MAC addresses to peer names for connection lookup
     std::unordered_map<MacAddress, std::string, MacAddressHash> peer_mac_to_name;
-    
-    // Public method for iOS bridge to inject discovered peers as beacons
-    void InjectPeerBeacon(const std::string& peer_name, const std::string& room_name,
-                          const std::string& title_id_str, const std::string& game_title);
-    
-    // Remove beacon for lost peer
-    void RemovePeerBeacon(const std::string& peer_name);
-    
-    // Get peer name from MAC address (for connection)
-    std::string GetPeerNameFromMac(const MacAddress& mac);
 #endif
 
     template <class Archive>
