@@ -1982,15 +1982,15 @@ void NWM_UDS::InjectPeerBeacon(const std::string& peer_name, const std::string& 
     fake_network_info.wlan_comm_id = (title_id >> 32) & 0xFFFFFFFF;
     fake_network_info.network_id = title_id & 0xFFFFFFFF;
     fake_network_info.total_nodes = 1;
-    fake_network_info.max_nodes = 4;
+    fake_network_info.max_nodes = 1;  // FIXED: Must match NodeList size to avoid assertion
     
     // Put game title in application data (truncate if needed)
     const size_t copy_size = std::min(game_title.size(), fake_network_info.application_data.size());
     std::memcpy(fake_network_info.application_data.data(), game_title.c_str(), copy_size);
     fake_network_info.application_data_size = static_cast<u8>(copy_size);
     
-    // Create fake node info for the host
-    NodeList fake_nodes(1);
+    // Create fake node info for the host (must have max_nodes entries)
+    NodeList fake_nodes(1);  // Size must match max_nodes
     fake_nodes[0].network_node_id = 1; // Host is always node 1
     
     // Copy peer name to username (convert to UTF-16)
