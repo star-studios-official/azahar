@@ -691,6 +691,8 @@ void NWM_UDS::RecvBeaconBroadcastData(Kernel::HLERequestContext& ctx) {
     std::size_t cur_buffer_size = sizeof(BeaconDataReplyHeader);
 
     auto beacons = GetReceivedBeacons(mac_address);
+    
+    LOG_INFO(Service_NWM, "[LocalMP] RecvBeaconBroadcastData returning {} beacons to game", beacons.size());
 
     BeaconDataReplyHeader data_reply_header{};
     data_reply_header.total_entries = static_cast<u32>(beacons.size());
@@ -2021,8 +2023,8 @@ void NWM_UDS::InjectPeerBeacon(const std::string& peer_name, const std::string& 
         received_beacons.pop_front();
     }
     
-    LOG_INFO(Service_NWM, "[LocalMP] Beacon injected successfully (MAC: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X})",
-             fake_mac[0], fake_mac[1], fake_mac[2], fake_mac[3], fake_mac[4], fake_mac[5]);
+    LOG_INFO(Service_NWM, "[LocalMP] Beacon injected successfully (MAC: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}), total beacons: {}",
+             fake_mac[0], fake_mac[1], fake_mac[2], fake_mac[3], fake_mac[4], fake_mac[5], received_beacons.size());
 }
 
 void NWM_UDS::RemovePeerBeacon(const std::string& peer_name) {
