@@ -450,6 +450,10 @@ graphics_api = 2
 # 0: Disabled, 1 (default): Enabled
 )") DECLARE_KEY(allow_plugin_loader) BOOST_HANA_STRING(R"(
 
+# Enable MultipeerConnectivity for local wireless multiplayer on iOS
+# 0: Disabled, 1 (default): Enabled
+enable_multipeer_connectivity =
+
 # Apply region free patch to installed applications
 # Patches the region of installed applications to be region free, so that they always appear on the home menu.
 # 0: Disabled, 1 (default): Enabled
