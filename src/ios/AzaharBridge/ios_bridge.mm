@@ -2083,4 +2083,57 @@ void az_nwm_peer_lost(const char* peer_name) {
     az_nwm_remove_peer_beacon(peer_name);
 }
 
+// Called when client wants to connect to a discovered peer
+void az_nwm_connect_to_peer_by_name(const char* peer_name) {
+    if (!peer_name || !g_multipeer_manager) {
+        LOG_WARNING(Frontend, "[NWM] Cannot connect - invalid peer name or manager not initialized");
+        return;
+    }
+    
+    LOG_INFO(Frontend, "[NWM] Attempting to connect to peer: {}", peer_name);
+    
+    @autoreleasepool {
+        id manager = (__bridge id)g_multipeer_manager;
+        
+        // Get the availableRooms array and find the matching peer
+        SEL getRoomsSelector = NSSelectorFromString(@"availableRooms");
+        if ([manager respondsToSelector:getRoomsSelector]) {
+            #pragma clang diagnostic push
+            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+            NSArray* rooms = [manager performSelector:getRoomsSelector];
+            #pragma clang diagnostic pop
+            
+            // Find the peer by name
+            for (id roomTuple in rooms) {
+                // roomTuple is a tuple (MCPeerID, [String:String])
+                // We need to extract the MCPeerID
+                if ([roomTuple respondsToSelector:@selector(peerID)]) {
+                    #pragma clang diagnostic push
+                    #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+                    MCPeerID* peerID = [roomTuple performSelector:@selector(peerID)];
+                    #pragma clang diagnostic pop
+                    
+                    if (peerID && [[peerID displayName] isEqualToString:@(peer_name)]) {
+                        // Found the peer! Call connectToPeer
+                        SEL connectSelector = NSSelectorFromString(@"connectToPeer:");
+                        if ([manager respondsToSelector:connectSelector]) {
+                            NSMethodSignature* signature = [manager methodSignatureForSelector:connectSelector];
+                            NSInvocation* invocation = [NSInvocation invocationWithMethodSignature:signature];
+                            [invocation setSelector:connectSelector];
+                            [invocation setTarget:manager];
+                            [invocation setArgument:&peerID atIndex:2];
+                            [invocation invoke];
+                            
+                            LOG_INFO(Frontend, "[NWM] MultipeerConnectivity invitation sent to: {}", peer_name);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+        
+        LOG_WARNING(Frontend, "[NWM] Could not find peer in available rooms: {}", peer_name);
+    }
+}
+
 } // extern "C"

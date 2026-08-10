@@ -1490,6 +1490,24 @@ void NWM_UDS::ConnectToNetworkHLE(NetworkInfo net_info, u8 connection_type,
 
     conn_type = static_cast<ConnectionType>(connection_type);
 
+#ifdef CITRA_IOS
+    // On iOS, trigger MultipeerConnectivity invitation to establish session
+    std::string peer_name = GetPeerNameFromMac(network_info.host_mac_address);
+    if (!peer_name.empty() && multipeer_backend) {
+        LOG_INFO(Service_NWM, "[LocalMP] Triggering MultipeerConnectivity invitation to peer: {}", peer_name);
+        
+        // Call the bridge function to send invitation
+        extern void az_nwm_connect_to_peer_by_name(const char*);
+        az_nwm_connect_to_peer_by_name(peer_name.c_str());
+        
+        // The MultipeerConnectivity session will be established asynchronously
+        // When the session connects, az_nwm_peer_connected() will be called
+        // Then we can proceed with the 3DS authentication/association sequence
+    } else {
+        LOG_WARNING(Service_NWM, "[LocalMP] Could not find peer name for MAC address, or backend not initialized");
+    }
+#endif
+
     // Start the connection sequence
     LOG_INFO(Service_NWM, "[LocalMP] Starting connection sequence to host");
     StartConnectionSequence(network_info.host_mac_address);
@@ -1944,6 +1962,9 @@ void NWM_UDS::InjectPeerBeacon(const std::string& peer_name, const std::string& 
     fake_mac[4] = (hash >> 8) & 0xFF;
     fake_mac[5] = hash & 0xFF;
     
+    // Store the mapping for connection lookup
+    peer_mac_to_name[fake_mac] = peer_name;
+    
     // Create a minimal fake beacon packet
     Network::WifiPacket beacon;
     beacon.type = Network::WifiPacket::PacketType::Beacon;
@@ -2018,6 +2039,9 @@ void NWM_UDS::RemovePeerBeacon(const std::string& peer_name) {
     fake_mac[4] = (hash >> 8) & 0xFF;
     fake_mac[5] = hash & 0xFF;
     
+    // Remove from mapping
+    peer_mac_to_name.erase(fake_mac);
+    
     std::scoped_lock lock(beacon_mutex);
     
     received_beacons.erase(
@@ -2028,6 +2052,14 @@ void NWM_UDS::RemovePeerBeacon(const std::string& peer_name) {
         received_beacons.end());
     
     LOG_INFO(Service_NWM, "[LocalMP] Beacon removed successfully");
+}
+
+std::string NWM_UDS::GetPeerNameFromMac(const MacAddress& mac) {
+    auto it = peer_mac_to_name.find(mac);
+    if (it != peer_mac_to_name.end()) {
+        return it->second;
+    }
+    return "";
 }
 #endif // CITRA_IOS
 
