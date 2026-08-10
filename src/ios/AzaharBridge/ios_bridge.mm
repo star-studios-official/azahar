@@ -1899,6 +1899,7 @@ void az_nwm_init_multipeer() {
 // Start hosting a local wireless network
 void az_nwm_start_hosting(const char* room_name, const char* title_id, const char* game_title) {
     if (!g_multipeer_manager) {
+        LOG_WARNING(Frontend, "[NWM] g_multipeer_manager is null, initializing...");
         az_nwm_init_multipeer();
     }
     
@@ -1910,7 +1911,19 @@ void az_nwm_start_hosting(const char* room_name, const char* title_id, const cha
             NSString* gameTitle = [NSString stringWithUTF8String:game_title];
             
             SEL selector = NSSelectorFromString(@"startHostingWithRoomName:titleId:gameTitle:");
+            
+            if (![manager respondsToSelector:selector]) {
+                LOG_ERROR(Frontend, "[NWM] LocalPlayManager doesn't respond to startHostingWithRoomName:titleId:gameTitle:");
+                LOG_ERROR(Frontend, "[NWM] Manager class: {}", [[manager className] UTF8String]);
+                return;
+            }
+            
             NSMethodSignature* signature = [manager methodSignatureForSelector:selector];
+            if (!signature) {
+                LOG_ERROR(Frontend, "[NWM] Failed to get method signature for startHostingWithRoomName:titleId:gameTitle:");
+                return;
+            }
+            
             NSInvocation* invocation = [NSInvocation invocationWithMethodSignature:signature];
             [invocation setSelector:selector];
             [invocation setTarget:manager];
@@ -1919,23 +1932,36 @@ void az_nwm_start_hosting(const char* room_name, const char* title_id, const cha
             [invocation setArgument:&gameTitle atIndex:4];
             [invocation invoke];
             
-            LOG_INFO(Frontend, "[NWM] Started hosting: {} | TitleID: {}", room_name, title_id);
+            LOG_INFO(Frontend, "[NWM] Successfully invoked startHostingWithRoomName - Room: {} | TitleID: {}", room_name, title_id);
         }
+    } else {
+        LOG_ERROR(Frontend, "[NWM] Failed to initialize g_multipeer_manager");
     }
 }
 
 // Start browsing for local wireless networks
 void az_nwm_start_browsing() {
     if (!g_multipeer_manager) {
+        LOG_WARNING(Frontend, "[NWM] g_multipeer_manager is null, initializing...");
         az_nwm_init_multipeer();
     }
     
     if (g_multipeer_manager) {
         @autoreleasepool {
             id manager = (__bridge id)g_multipeer_manager;
-            [manager performSelector:@selector(startBrowsing)];
-            LOG_INFO(Frontend, "[NWM] Started browsing for local wireless sessions");
+            SEL selector = @selector(startBrowsing);
+            
+            if (![manager respondsToSelector:selector]) {
+                LOG_ERROR(Frontend, "[NWM] LocalPlayManager doesn't respond to startBrowsing");
+                LOG_ERROR(Frontend, "[NWM] Manager class: {}", [[manager className] UTF8String]);
+                return;
+            }
+            
+            [manager performSelector:selector];
+            LOG_INFO(Frontend, "[NWM] Successfully invoked startBrowsing");
         }
+    } else {
+        LOG_ERROR(Frontend, "[NWM] Failed to initialize g_multipeer_manager");
     }
 }
 
