@@ -695,6 +695,13 @@ private:
 #ifdef CITRA_IOS
     // iOS MultipeerConnectivity backend for local wireless play
     std::unique_ptr<NWMMultipeerBackend> multipeer_backend;
+    
+    // Public method for iOS bridge to inject discovered peers as beacons
+    void InjectPeerBeacon(const std::string& peer_name, const std::string& room_name,
+                          const std::string& title_id_str, const std::string& game_title);
+    
+    // Remove beacon for lost peer
+    void RemovePeerBeacon(const std::string& peer_name);
 #endif
 
     template <class Archive>

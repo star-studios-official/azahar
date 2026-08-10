@@ -404,6 +404,15 @@ void Config::ReadValues() {
     }
 
     ReadSetting("System", Settings::values.steps_per_hour);
+    
+    // Enable MultipeerConnectivity by default on iOS if not explicitly set
+    if (!ios_config->HasValue("System", "enable_multipeer_connectivity")) {
+        Settings::values.enable_multipeer_connectivity.SetValue(true);
+        LOG_INFO(Config, "MultipeerConnectivity enabled by default on iOS");
+    } else {
+        ReadSetting("System", Settings::values.enable_multipeer_connectivity);
+    }
+    
     ReadSetting("System", Settings::values.apply_region_free_patch);
 
     // Camera

@@ -245,7 +245,13 @@ extension LocalPlayManager: MCNearbyServiceBrowserDelegate {
             AppLogger.info("[LocalPlay] 🔍 Found peer: \(peerID.displayName)")
             AppLogger.info("[LocalPlay]    Room: \(roomName) | Game: \(gameTitle) | TitleID: \(titleId)")
             
-            // Notify UI about available room (could trigger a notification)
+            // Notify C++ bridge about discovered peer so it can generate a beacon
+            az_nwm_peer_discovered(
+                peerID.displayName,
+                roomName,
+                titleId,
+                gameTitle
+            )
         }
     }
     
@@ -255,6 +261,9 @@ extension LocalPlayManager: MCNearbyServiceBrowserDelegate {
             
             self.availableRooms.removeAll { $0.peerID == peerID }
             AppLogger.info("[LocalPlay] 📤 Lost peer: \(peerID.displayName)")
+            
+            // Notify C++ bridge that peer was lost
+            az_nwm_peer_lost(peerID.displayName)
         }
     }
     
@@ -276,3 +285,10 @@ func az_nwm_peer_disconnected(_ peerName: UnsafePointer<CChar>)
 
 @_silgen_name("az_nwm_receive_packet")
 func az_nwm_receive_packet(_ data: UnsafeRawPointer, _ length: Int)
+
+@_silgen_name("az_nwm_peer_discovered")
+func az_nwm_peer_discovered(_ peerName: UnsafePointer<CChar>, _ roomName: UnsafePointer<CChar>, 
+                            _ titleId: UnsafePointer<CChar>, _ gameTitle: UnsafePointer<CChar>)
+
+@_silgen_name("az_nwm_peer_lost")
+func az_nwm_peer_lost(_ peerName: UnsafePointer<CChar>)

@@ -2053,4 +2053,34 @@ void az_nwm_receive_packet(const void* data, size_t length) {
               length, g_nwm_received_packets.size());
 }
 
+// Called when a peer is discovered during browsing
+void az_nwm_peer_discovered(const char* peer_name, const char* room_name, 
+                             const char* title_id_str, const char* game_title) {
+    if (!peer_name || !room_name || !title_id_str) {
+        return;
+    }
+    
+    LOG_INFO(Frontend, "[NWM] Peer discovered: {}", peer_name);
+    LOG_INFO(Frontend, "[NWM]   Room: {} | TitleID: {} | Game: {}", 
+             room_name, title_id_str, game_title ? game_title : "Unknown");
+    
+    // Get access to NWM_UDS service instance and inject the beacon
+    // This is declared in nwm_uds.cpp as an extern function
+    extern void az_nwm_inject_peer_beacon(const char*, const char*, const char*, const char*);
+    az_nwm_inject_peer_beacon(peer_name, room_name, title_id_str, game_title);
+}
+
+// Called when a previously discovered peer is lost
+void az_nwm_peer_lost(const char* peer_name) {
+    if (!peer_name) {
+        return;
+    }
+    
+    LOG_INFO(Frontend, "[NWM] Peer lost: {}", peer_name);
+    
+    // Remove the beacon for this peer
+    extern void az_nwm_remove_peer_beacon(const char*);
+    az_nwm_remove_peer_beacon(peer_name);
+}
+
 } // extern "C"

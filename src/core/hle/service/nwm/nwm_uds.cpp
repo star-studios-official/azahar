@@ -37,6 +37,12 @@ SERVICE_CONSTRUCT_IMPL(Service::NWM::NWM_UDS)
 
 namespace Service::NWM {
 
+#ifdef CITRA_IOS
+// Global pointer to NWM_UDS instance for iOS bridge access
+// This is accessed from the C bridge functions at the end of this file
+static NWM_UDS* g_nwm_uds_instance = nullptr;
+#endif
+
 template <class Archive>
 void NWM_UDS::serialize(Archive& ar, const unsigned int) {
     DEBUG_SERIALIZATION_POINT;
@@ -1874,10 +1880,17 @@ NWM_UDS::NWM_UDS(Core::System& system) : ServiceFramework("nwm::UDS"), system(sy
     system.Kernel().GetSharedPageHandler().SetMacAddress(GetMacAddress());
 
 #ifdef CITRA_IOS
-    // Initialize iOS MultipeerConnectivity backend
-    multipeer_backend = std::make_unique<NWMMultipeerBackend>();
-    multipeer_backend->Initialize();
-    LOG_INFO(Service_NWM, "[LocalMP] iOS MultipeerConnectivity backend initialized");
+    // Store global instance pointer for iOS bridge
+    g_nwm_uds_instance = this;
+    
+    // Initialize iOS MultipeerConnectivity backend if enabled
+    if (Settings::values.enable_multipeer_connectivity.GetValue()) {
+        multipeer_backend = std::make_unique<NWMMultipeerBackend>();
+        multipeer_backend->Initialize();
+        LOG_INFO(Service_NWM, "[LocalMP] iOS MultipeerConnectivity backend initialized");
+    } else {
+        LOG_INFO(Service_NWM, "[LocalMP] iOS MultipeerConnectivity disabled by user setting");
+    }
 #endif
 
     // The network room may not be initialized yet - this is expected during early startup.
@@ -1891,12 +1904,158 @@ NWM_UDS::NWM_UDS(Core::System& system) : ServiceFramework("nwm::UDS"), system(sy
 }
 
 NWM_UDS::~NWM_UDS() {
+#ifdef CITRA_IOS
+    // Clear global instance pointer
+    if (g_nwm_uds_instance == this) {
+        g_nwm_uds_instance = nullptr;
+    }
+#endif
+
     if (auto room_member = Network::GetRoomMember().lock())
         room_member->Unbind(wifi_packet_received);
 
     system.CoreTiming().UnscheduleEvent(beacon_broadcast_event, 0);
 }
 
+#ifdef CITRA_IOS
+void NWM_UDS::InjectPeerBeacon(const std::string& peer_name, const std::string& room_name,
+                                const std::string& title_id_str, const std::string& game_title) {
+    LOG_INFO(Service_NWM, "[LocalMP] Injecting beacon for peer: {} (room: {}, titleID: {})",
+             peer_name, room_name, title_id_str);
+    
+    // Parse title ID from string
+    u64 title_id = 0;
+    try {
+        title_id = std::stoull(title_id_str, nullptr, 16);
+    } catch (...) {
+        LOG_ERROR(Service_NWM, "[LocalMP] Failed to parse title ID: {}", title_id_str);
+        return;
+    }
+    
+    // Generate a fake MAC address from peer name hash
+    // This ensures the same peer always gets the same MAC
+    std::hash<std::string> hasher;
+    size_t hash = hasher(peer_name);
+    MacAddress fake_mac;
+    fake_mac[0] = 0x40; // Set locally administered bit
+    fake_mac[1] = (hash >> 32) & 0xFF;
+    fake_mac[2] = (hash >> 24) & 0xFF;
+    fake_mac[3] = (hash >> 16) & 0xFF;
+    fake_mac[4] = (hash >> 8) & 0xFF;
+    fake_mac[5] = hash & 0xFF;
+    
+    // Create a minimal fake beacon packet
+    Network::WifiPacket beacon;
+    beacon.type = Network::WifiPacket::PacketType::Beacon;
+    beacon.channel = DefaultNetworkChannel;
+    beacon.transmitter_address = fake_mac;
+    beacon.destination_address = Network::BroadcastMac;
+    
+    // Create minimal network info for the beacon
+    NetworkInfo fake_network_info{};
+    fake_network_info.host_mac_address = fake_mac;
+    fake_network_info.channel = DefaultNetworkChannel;
+    fake_network_info.initialized = 1;
+    fake_network_info.oui_value = NintendoOUI;
+    fake_network_info.oui_type = static_cast<u8>(NintendoTagId::NetworkInfo);
+    fake_network_info.wlan_comm_id = (title_id >> 32) & 0xFFFFFFFF;
+    fake_network_info.network_id = title_id & 0xFFFFFFFF;
+    fake_network_info.total_nodes = 1;
+    fake_network_info.max_nodes = 4;
+    
+    // Put game title in application data (truncate if needed)
+    const size_t copy_size = std::min(game_title.size(), fake_network_info.application_data.size());
+    std::memcpy(fake_network_info.application_data.data(), game_title.c_str(), copy_size);
+    fake_network_info.application_data_size = static_cast<u8>(copy_size);
+    
+    // Create fake node info for the host
+    NodeList fake_nodes(1);
+    fake_nodes[0].network_node_id = 1; // Host is always node 1
+    
+    // Copy peer name to username (convert to UTF-16)
+    const size_t name_copy_size = std::min(peer_name.size(), fake_nodes[0].username.size());
+    for (size_t i = 0; i < name_copy_size; ++i) {
+        fake_nodes[0].username[i] = static_cast<u16>(peer_name[i]);
+    }
+    
+    // Generate a minimal beacon frame
+    beacon.data = GenerateBeaconFrame(fake_network_info, fake_nodes);
+    
+    // Inject the beacon into the received beacons list
+    std::scoped_lock lock(beacon_mutex);
+    
+    // Remove any existing beacon from this peer
+    received_beacons.erase(
+        std::remove_if(received_beacons.begin(), received_beacons.end(),
+                      [&fake_mac](const Network::WifiPacket& pkt) {
+                          return pkt.transmitter_address == fake_mac;
+                      }),
+        received_beacons.end());
+    
+    // Add the new beacon
+    received_beacons.emplace_back(beacon);
+    
+    // Discard old beacons if buffer is full
+    if (received_beacons.size() > MaxBeaconFrames) {
+        received_beacons.pop_front();
+    }
+    
+    LOG_INFO(Service_NWM, "[LocalMP] Beacon injected successfully (MAC: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X})",
+             fake_mac[0], fake_mac[1], fake_mac[2], fake_mac[3], fake_mac[4], fake_mac[5]);
+}
+
+void NWM_UDS::RemovePeerBeacon(const std::string& peer_name) {
+    LOG_INFO(Service_NWM, "[LocalMP] Removing beacon for peer: {}", peer_name);
+    
+    // Generate the same MAC we used when adding the beacon
+    std::hash<std::string> hasher;
+    size_t hash = hasher(peer_name);
+    MacAddress fake_mac;
+    fake_mac[0] = 0x40;
+    fake_mac[1] = (hash >> 32) & 0xFF;
+    fake_mac[2] = (hash >> 24) & 0xFF;
+    fake_mac[3] = (hash >> 16) & 0xFF;
+    fake_mac[4] = (hash >> 8) & 0xFF;
+    fake_mac[5] = hash & 0xFF;
+    
+    std::scoped_lock lock(beacon_mutex);
+    
+    received_beacons.erase(
+        std::remove_if(received_beacons.begin(), received_beacons.end(),
+                      [&fake_mac](const Network::WifiPacket& pkt) {
+                          return pkt.transmitter_address == fake_mac;
+                      }),
+        received_beacons.end());
+    
+    LOG_INFO(Service_NWM, "[LocalMP] Beacon removed successfully");
+}
+#endif // CITRA_IOS
+
 } // namespace Service::NWM
+
+#ifdef CITRA_IOS
+// Bridge functions for iOS to access NWM_UDS instance
+extern "C" {
+
+void az_nwm_inject_peer_beacon(const char* peer_name, const char* room_name,
+                                const char* title_id_str, const char* game_title) {
+    if (Service::NWM::g_nwm_uds_instance) {
+        Service::NWM::g_nwm_uds_instance->InjectPeerBeacon(
+            peer_name ? peer_name : "",
+            room_name ? room_name : "",
+            title_id_str ? title_id_str : "",
+            game_title ? game_title : ""
+        );
+    }
+}
+
+void az_nwm_remove_peer_beacon(const char* peer_name) {
+    if (Service::NWM::g_nwm_uds_instance && peer_name) {
+        Service::NWM::g_nwm_uds_instance->RemovePeerBeacon(peer_name);
+    }
+}
+
+} // extern "C"
+#endif // CITRA_IOS
 
 SERIALIZE_EXPORT_IMPL(Service::NWM::NWM_UDS::ThreadCallback)

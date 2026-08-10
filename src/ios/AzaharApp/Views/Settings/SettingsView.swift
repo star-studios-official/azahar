@@ -529,6 +529,12 @@ struct SettingsView: View {
                 }
 
                 settingsSection("Network", icon: "network") {
+                    SettingToggle(
+                        title: "Local Multiplayer (MultipeerConnectivity)",
+                        description: "Enable local wireless multiplayer between iPhones/iPads. Requires iOS 14+ and local network permissions.",
+                        group: "System", key: "enable_multipeer_connectivity"
+                    )
+                    
                     Button {
                         showArticBaseDialog = true
                     } label: {
