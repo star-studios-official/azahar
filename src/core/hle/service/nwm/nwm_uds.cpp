@@ -663,6 +663,9 @@ void NWM_UDS::RecvBeaconBroadcastData(Kernel::HLERequestContext& ctx) {
 
     MacAddress mac_address;
     rp.PopRaw(mac_address);
+    
+    LOG_DEBUG(Service_NWM, "[LocalMP] RecvBeaconBroadcastData called with MAC filter: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+              mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5]);
 
     // uninitialized data in scan input struct
     rp.Skip(9, false);
