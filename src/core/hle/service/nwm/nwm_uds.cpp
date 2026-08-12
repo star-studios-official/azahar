@@ -80,8 +80,11 @@ std::list<Network::WifiPacket> NWM_UDS::GetReceivedBeacons(const MacAddress& sen
                                          });
         if (beacon != received_beacons.end()) {
             filtered_list.push_back(*beacon);
+            // Don't erase beacons - they need to persist for multiple scans
+            // This is especially important for iOS MultipeerConnectivity injected beacons
+            // which are one-time events, not continuously received like real WiFi beacons
             // TODO(B3N30): Check if the complete deque is cleared or just the fetched entries
-            received_beacons.erase(beacon);
+            // received_beacons.erase(beacon);
         }
         return filtered_list;
     }
