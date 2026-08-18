@@ -445,7 +445,6 @@ void PicaCore::HandleSpecialRegBatch(u32 id, const u32* values, u32 count) {
                 const u32 idx = range->first_index + i;
                 gs_setup.uniforms.f[idx] = vs_setup.uniforms.f[idx];
             }
-            }
             break;
     }
     case PICA_REG_INDEX(vs.program.set_word[0]):
