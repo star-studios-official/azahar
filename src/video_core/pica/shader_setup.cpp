@@ -323,5 +323,6 @@ void ShaderSetup::DoProgramCodeFixup() {
     };
     */
     // No games require shader fixups right now
+}
 
 } // namespace Pica
