@@ -51,6 +51,8 @@ void NWM_UDS::serialize(Archive& ar, const unsigned int) {
     ar & connection_event;
     ar & received_beacons;
     // wifi_packet_received set in constructor
+    // pending packet queue is lost, but that's fine as it doesn't make sense to save state during
+    // an active multiplayer session as it will mess up everything anyways.
 }
 
 namespace ErrCodes {
@@ -214,7 +216,7 @@ void NWM_UDS::HandleAssociationResponseFrame(const Network::WifiPacket& packet) 
 }
 
 void NWM_UDS::HandleEAPoLPacket(const Network::WifiPacket& packet) {
-    std::scoped_lock lock{connection_status_mutex, system.Kernel().GetHLELock()};
+    std::scoped_lock lock{connection_status_mutex};
 
     if (GetEAPoLFrameType(packet.data) == EAPoLStartMagic) {
         if (connection_status.status != NetworkStatus::ConnectedAsHost) {
@@ -365,7 +367,7 @@ void NWM_UDS::HandleEAPoLPacket(const Network::WifiPacket& packet) {
 
 void NWM_UDS::HandleSecureDataPacket(const Network::WifiPacket& packet) {
     const auto secure_data = ParseSecureDataHeader(packet.data);
-    std::scoped_lock lock{connection_status_mutex, system.Kernel().GetHLELock()};
+    std::scoped_lock lock{connection_status_mutex};
 
     if (connection_status.status != NetworkStatus::ConnectedAsHost &&
         connection_status.status != NetworkStatus::ConnectedAsClient &&
@@ -517,7 +519,6 @@ void NWM_UDS::HandleAuthenticationFrame(const Network::WifiPacket& packet) {
 
 void NWM_UDS::HandleDeauthenticationFrame(const Network::WifiPacket& packet) {
     LOG_DEBUG(Service_NWM, "called");
-    std::scoped_lock lock{connection_status_mutex, system.Kernel().GetHLELock()};
 
     if (connection_status.status != NetworkStatus::ConnectedAsHost) {
         LOG_ERROR(Service_NWM, "Got deauthentication frame but we are not the host");
@@ -1903,6 +1904,16 @@ NWM_UDS::NWM_UDS(Core::System& system) : ServiceFramework("nwm::UDS"), system(sy
             BeaconBroadcastCallback(user_data, cycles_late);
         });
 
+
+    handle_wifi_packet_event = system.CoreTiming().RegisterEvent(
+        "UDS::OnWifiPacketReceived",
+        [this]([[maybe_unused]] std::uintptr_t user_data, s64 cycles_late) {
+            Network::WifiPacket packet;
+            if (pending_packets.Pop(packet)) {
+                OnWifiPacketReceived(packet);
+            }
+        });
+
     system.Kernel().GetSharedPageHandler().SetMacAddress(GetMacAddress());
 
 #ifdef CITRA_IOS
@@ -1922,8 +1933,11 @@ NWM_UDS::NWM_UDS(Core::System& system) : ServiceFramework("nwm::UDS"), system(sy
     // The network room may not be initialized yet - this is expected during early startup.
     // The room member will be bound when the network is initialized.
     if (auto room_member = Network::GetRoomMember().lock()) {
-        wifi_packet_received = room_member->BindOnWifiPacketReceived(
-            [this](const Network::WifiPacket& packet) { OnWifiPacketReceived(packet); });
+        wifi_packet_received =
+            room_member->BindOnWifiPacketReceived([this](const Network::WifiPacket& packet) {
+                pending_packets.Push(packet);
+                this->system.CoreTiming().ScheduleEvent(0, handle_wifi_packet_event, 0, 1, true);
+            });
     } else {
         LOG_WARNING(Service_NWM, "Network room not yet initialized, will bind when available");
     }

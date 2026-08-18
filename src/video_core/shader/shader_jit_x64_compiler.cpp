@@ -5,6 +5,7 @@
 #include "common/arch.h"
 #if CITRA_ARCH(x86_64)
 
+#include <bit>
 #include <nihstro/shader_bytecode.h>
 #include <smmintrin.h>
 #include <xbyak/xbyak_util.h>
