@@ -445,7 +445,8 @@ void PicaCore::HandleSpecialRegBatch(u32 id, const u32* values, u32 count) {
                 const u32 idx = range->first_index + i;
                 gs_setup.uniforms.f[idx] = vs_setup.uniforms.f[idx];
             }
-            break;
+        }
+        break;
     }
     case PICA_REG_INDEX(vs.program.set_word[0]):
     case PICA_REG_INDEX(vs.program.set_word[1]):
@@ -463,8 +464,8 @@ void PicaCore::HandleSpecialRegBatch(u32 id, const u32* values, u32 count) {
             if (!regs.internal.pipeline.gs_unit_exclusive_configuration &&
                 regs.internal.pipeline.use_gs == PipelineRegs::UseGS::No) {
                 gs_setup.UpdateProgramCodeRange(offset, values, count);
-                }
-                offset += count;
+            }
+            offset += count;
         }
         break;
     }
@@ -484,8 +485,8 @@ void PicaCore::HandleSpecialRegBatch(u32 id, const u32* values, u32 count) {
             if (!regs.internal.pipeline.gs_unit_exclusive_configuration &&
                 regs.internal.pipeline.use_gs == PipelineRegs::UseGS::No) {
                 gs_setup.UpdateSwizzleDataRange(offset, values, count);
-                }
-                offset += count;
+            }
+            offset += count;
         }
         break;
     }
@@ -942,6 +943,7 @@ void PicaCore::WriteInternalReg(u32 id, u32 value, u32 mask, bool& stop_requeste
     if (id >= RegsInternal::NUM_REGS) [[unlikely]] {
         // Writes to OOB registers are no-op.
         LOG_DEBUG(
+            HW_GPU,
             "Commandlist tried to write to invalid register 0x{:03X} (value: {:08X}, mask: {:X})",
             id, value, mask);
         return;
