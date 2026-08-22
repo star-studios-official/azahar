@@ -100,8 +100,8 @@ void RendererOpenGL::SwapBuffers() {
         secondaryWindowEnabled = false;
     }
 #else
-    if (Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows) {
-        ASSERT(secondary_window);
+    if (Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows &&
+        secondary_window) {
         secondaryWindowEnabled = true;
     } else {
         secondaryWindowEnabled = false;
@@ -130,8 +130,8 @@ void RendererOpenGL::SwapBuffers() {
         secondary_window->PollEvents();
     }
 #else
-    if (Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows) {
-        ASSERT(secondary_window);
+    if (Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows &&
+        secondary_window) {
         const auto& secondary_layout = secondary_window->GetFramebufferLayout();
         isSecondaryWindow = true;
         RenderToMailbox(secondary_layout, secondary_window->mailbox, false);

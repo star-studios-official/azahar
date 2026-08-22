@@ -103,6 +103,13 @@ final class AppState: ObservableObject {
         az_create_log_file()
         az_set_user_directory(documentsPath)
         az_create_config_file()
+
+        // Reset any unsafe layout settings persisted by the old external
+        // display code (SeparateWindows crashes without a secondary window).
+        // Must run AFTER az_set_user_directory + az_create_config_file so
+        // the config file can actually be read.
+        DisplayManager.resetLayoutIfNeeded()
+
         az_init_crypto()  // Initialize AES keys for CIA/NUS operations
         az_init_network()  // Initialize network subsystem for local multiplayer
         az_log_device_info()

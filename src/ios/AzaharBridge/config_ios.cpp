@@ -313,14 +313,22 @@ void Config::ReadValues() {
     if (layoutInt < 0 || layoutInt > 5) {
         layoutInt = static_cast<int>(Settings::LayoutOption::LargeScreen);
     }
+    // iOS has no secondary window — SeparateWindows would crash the Vulkan
+    // renderer via ASSERT(secondary_window) and is never usable here.
+    if (layoutInt == static_cast<int>(Settings::LayoutOption::SeparateWindows)) {
+        LOG_WARNING(Config, "layout_option SeparateWindows is unsupported on iOS, falling back to LargeScreen");
+        layoutInt = static_cast<int>(Settings::LayoutOption::LargeScreen);
+    }
     Settings::values.layout_option = static_cast<Settings::LayoutOption>(layoutInt);
     Settings::values.screen_gap =
     static_cast<int>(ios_config->GetReal("Layout", "screen_gap", 0));
     Settings::values.large_screen_proportion =
     static_cast<float>(ios_config->GetReal("Layout", "large_screen_proportion", 2.25));
+    // Default to BelowLarge so both screens stack vertically (matching
+    // physical 3DS layout) rather than TopRight which places them side-by-side.
     Settings::values.small_screen_position = static_cast<Settings::SmallScreenPosition>(
         ios_config->GetInteger("Layout", "small_screen_position",
-                               static_cast<int>(Settings::SmallScreenPosition::TopRight)));
+                               static_cast<int>(Settings::SmallScreenPosition::BelowLarge)));
     ReadSetting("Layout", Settings::values.screen_gap);
     ReadSetting("Layout", Settings::values.custom_top_x);
     ReadSetting("Layout", Settings::values.custom_top_y);

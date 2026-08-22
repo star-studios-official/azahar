@@ -1130,8 +1130,8 @@ void RendererVulkan::SwapBuffers() {
     system.perf_stats->StartSwap();
     screenRendered = false;
 #ifndef ANDROID
-    if (Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows) {
-        ASSERT(secondary_window);
+    if (Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows &&
+        secondary_window) {
         secondaryWindowEnabled = true;
     } else {
         secondaryWindowEnabled = false;
@@ -1152,8 +1152,8 @@ void RendererVulkan::SwapBuffers() {
     isSecondaryWindow = false;
     RenderToWindow(main_present_window, layout, false);
 #ifndef ANDROID
-    if (Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows) {
-        ASSERT(secondary_window);
+    if (Settings::values.layout_option.GetValue() == Settings::LayoutOption::SeparateWindows &&
+        secondary_window) {
         const auto& secondary_layout = secondary_window->GetFramebufferLayout();
         if (!secondary_present_window_ptr && secondary_window->GetWindowInfo().render_surface) {
             secondary_present_window_ptr = std::make_unique<PresentWindow>(
