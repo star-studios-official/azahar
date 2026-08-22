@@ -1423,7 +1423,7 @@ void az_init_system_save_data(void) {
         {
             std::string config_path = cfg_dir + "/config";
             if (!FileUtil::Exists(config_path)) {
-                File::IOFile f(config_path, "wb");
+                FileUtil::IOFile f(config_path, "wb");
                 // Write a minimal 0x800-byte config block (zeroed)
                 std::vector<u8> zeroes(0x800, 0);
                 f.WriteBytes(zeroes.data(), zeroes.size());
@@ -1443,25 +1443,25 @@ void az_init_system_save_data(void) {
             std::string p;
             p = acct_dir + "/account.dat";
             if (!FileUtil::Exists(p)) {
-                File::IOFile f(p, "wb");
+                FileUtil::IOFile f(p, "wb");
                 std::vector<u8> zeroes(0x200, 0);
                 f.WriteBytes(zeroes.data(), zeroes.size());
             }
             p = acct_dir + "/hash.dat";
             if (!FileUtil::Exists(p)) {
-                File::IOFile f(p, "wb");
+                FileUtil::IOFile f(p, "wb");
                 std::vector<u8> zeroes(0x100, 0);
                 f.WriteBytes(zeroes.data(), zeroes.size());
             }
             p = acct_dir + "/initacc.dat";
             if (!FileUtil::Exists(p)) {
-                File::IOFile f(p, "wb");
+                FileUtil::IOFile f(p, "wb");
                 std::vector<u8> zeroes(0x100, 0);
                 f.WriteBytes(zeroes.data(), zeroes.size());
             }
             p = acct_dir + "/autodbg.dat";
             if (!FileUtil::Exists(p)) {
-                File::IOFile f(p, "wb");
+                FileUtil::IOFile f(p, "wb");
                 std::vector<u8> zeroes(0x100, 0);
                 f.WriteBytes(zeroes.data(), zeroes.size());
             }
