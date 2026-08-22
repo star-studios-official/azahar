@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <tuple>
 #include <boost/serialization/array.hpp>
 #include <boost/serialization/unique_ptr.hpp>
@@ -491,14 +492,28 @@ void Module::Interface::SecureInfoGetSerialNo(Kernel::HLERequestContext& ctx) {
 
     // Never happens on real hardware, but may happen if user didn't supply a dump.
     // Always make sure to have available both secure data kinds or error otherwise.
-    if (!secure_info_a.IsValid() || !local_friend_code_seed_b.IsValid()) {
-        IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
-        rb.Push(Result(ErrorDescription::NotFound, ErrorModule::Config, ErrorSummary::InvalidState,
-                       ErrorLevel::Permanent));
+    if (secure_info_a.IsValid() && local_friend_code_seed_b.IsValid()) {
+        out_buffer.Write(secure_info_a.body.serial_number.data(), 0,
+                         sizeof(HW::UniqueData::SecureInfoA::body.serial_number));
+    } else {
+        // No SecureInfo_A dump (e.g. NUS-only system files install): synthesize
+        // a stable serial number derived from the CFG console unique ID so LLE
+        // system modules (e.g. ACT, which calls CFG:SecureInfoGetSerialNo at
+        // boot) can proceed. The ACT module only stores the serial locally; it
+        // is never validated against Nintendo's servers.
+        const u64 console_id = cfg->GetConsoleUniqueId();
+        const std::string serial =
+            fmt::format("SYS{:09d}", static_cast<u32>(console_id & 0xFFFFFFFF) % 1000000000);
+        // Zero-fill the whole 15-byte field first (like the real SecureInfo_A
+        // serial, which is NUL-padded) so Strlcpy in the ACT module never
+        // reads stale mapped-buffer bytes past the string.
+        std::array<u8, sizeof(HW::UniqueData::SecureInfoA::body.serial_number)> serial_buf{};
+        std::memcpy(serial_buf.data(), serial.data(),
+                    std::min(serial.size(), serial_buf.size()));
+        out_buffer.Write(serial_buf.data(), 0, serial_buf.size());
+        LOG_WARNING(Service_CFG,
+                    "SecureInfo_A not available, using synthesized serial number {}", serial);
     }
-
-    out_buffer.Write(secure_info_a.body.serial_number.data(), 0,
-                     sizeof(HW::UniqueData::SecureInfoA::body.serial_number));
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 2);
     rb.Push(ResultSuccess);

@@ -55,7 +55,6 @@
 #include "core/hle/service/sm/srv.h"
 #include "core/hle/service/soc/soc_u.h"
 #include "core/hle/service/ssl/ssl_c.h"
-#include "core/hw/unique_data.h"
 #include "core/loader/loader.h"
 
 namespace Service {
@@ -205,22 +204,6 @@ static bool AttemptLLE(const ServiceModuleInfo& service_module, u64 loading_titl
 
     if (!Settings::values.lle_modules.at(service_module.name)) {
         if (!enable_recommended_lle_modules || !service_module.is_online_recommended) {
-            return false;
-        }
-        // The recommended online modules (ACT, BOSS, CECD, FRD, NIM) run real
-        // firmware that initializes from the console's unique data
-        // (SecureInfo_A / LocalFriendCodeSeed_B) and the system save data that
-        // those files derive (e.g. the ACT module's sysdata 0x00010038). These
-        // only exist on a full console dump; with a NUS-only system files
-        // install the firmware crashes on boot (the ACT module throws a fatal
-        // error when its save data is missing or invalid). Fall back to the HLE
-        // implementation in that case.
-        if (!HW::UniqueData::GetSecureInfoA().IsValid() ||
-            !HW::UniqueData::GetLocalFriendCodeSeedB().IsValid()) {
-            LOG_WARNING(Service,
-                        "Recommended LLE module \"{}\" skipped: console unique data "
-                        "(SecureInfo_A / LocalFriendCodeSeed_B) not available, using HLE.",
-                        service_module.name);
             return false;
         }
     }

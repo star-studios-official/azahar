@@ -197,24 +197,79 @@ the real ACT module can never initialize. Neither reference (`ref/azahar`,
 `ref/AzaharPlus`) creates ACT save data; their `act.cpp` is byte-identical to this
 fork's stub, and their install flow creates no sysdata.
 
-### 7.3 Fix implemented
+### 7.3 Root cause (from the official system-module source)
 
-1. **`src/core/hle/service/service.cpp` — `AttemptLLE`:** recommended-LLE loading
-   now also requires the console unique data to be present
-   (`HW::UniqueData::GetSecureInfoA().IsValid() &&
-   GetLocalFriendCodeSeedB().IsValid()`). Without a full dump (the NUS-only case)
-   the online modules fall back to **HLE** with a warning, matching AzaharPlus's
-   default configuration (`enable_required_online_lle_modules = false`). Users who
-   supply a full NAND dump keep LLE/online features. Explicit per-module LLE
-   toggles (`Settings::values.lle_modules`) are unaffected.
-2. **`src/core/hle/service/act/act.cpp` — `GetAccountInfo`:** zero-fills the
-   requested block in the output buffer, so the Home Menu's account library gets a
-   valid "fresh console, no NNID" response instead of stale mapped-buffer memory.
+`ref/ctr` is the leaked Nintendo 3DS SDK and contains the **actual source of the
+system modules**. Reading `ref/ctr/sources/processes/act/` (the ACT module)
+decodes the fatal precisely:
 
-### 7.4 Future work (not done, per scope)
+- `act_Main.cpp` → `SessionManager` boot steps 9–11 open the ACT save data via
+  `AccountManager`, which **self-initializes** on first boot (its KVS text files
+  are created by the module itself — see `save/act_KeyValueStore.cpp`; a missing
+  or malformed file is logged as "The administrative file not found. Created." and
+  recreated). So the save data was never the real blocker.
+- Step 12 is `SystemInfoManager::CreateSingleton` → `Initialize()`
+  (`util/act_SystemInfoManager.cpp`), which reads the **console device
+  information**:
+  1. `ReadDeviceCert` → `nn::am::GetDeviceCert` (`AMNet:GetDeviceCert`,
+     0x0818) — needs a 384-byte device cert.
+  2. `ReadDeviceId` → `nn::am::GetDeviceId` (`AM:GetDeviceID`, 0x000A).
+  3. `ReadSerialId` → `nn::cfg::CTR::system::GetSerialNo`
+     (`CFG:SecureInfoGetSerialNo`, 0x0408 on cfg:sys).
+  4. `ReadSystemVersion` → `nn::am::GetProgramInfos` for the region's NUP
+     version title (`NVer`, e.g. US `0x000400DB00016302` — installed with the
+     system files).
+- Any of the first three failing is converted to `ResultDeviceInfoReadError`
+  (desc 351 → display `022-5351`): **that is the fatal in log4/log6.**
 
-To get real online features working with NUS-only files you would need to implement
-the ACT save data format (undocumented in the wiki; requires the console's
-persistent ID derivation from `LocalFriendCodeSeed_B`, account-structure hashing in
-`hash.dat`, etc.) — or run with a full console dump. Both refs treat this as
-out-of-scope.
+The emulator returns `NotFound` for all three when the OTP dump / `SecureInfo_A`
+are absent, because on real hardware they are derived from the console's OTP
+(`AM:GetDeviceID` reads `otp.GetDeviceID()`; `GetDeviceCert` serializes the CT
+cert built from OTP; the serial lives in `SecureInfo_A`). The ACT module stores
+these values locally (base64-encodes the cert, keeps the ID/serial in memory); it
+never validates them against Nintendo's servers at boot.
+
+### 7.4 Fix implemented — synthesize the console device identity
+
+Instead of blocking LLE, the emulator now **synthesizes** the device identity so
+the real ACT module can boot on a NUS-only install (no OTP/SecureInfo dump):
+
+1. **`src/core/hle/service/am/am.cpp` — `AM:GetDeviceID`:** when the OTP is
+   invalid, derive a stable device ID from the CFG console unique ID
+   (`Service::CFG::GetModule(system)->GetConsoleUniqueId()`), which is generated
+   and persisted by the emulator at config init. LLE modules (e.g. ACT) get a
+   real, stable value instead of `NotFound`.
+2. **`src/core/hle/service/am/am.cpp` — `AM:GetDeviceCert`:** when the CT cert
+   (from OTP) is invalid, build a structurally valid 384-byte self-signed ECC
+   device certificate (`Certificate::BuildECC` + `GenerateKeyPair`), matching
+   `NN_ACT_DEVICE_CERT_SIZE = 384`. The ACT module only base64-encodes and stores
+   it — it never verifies it locally.
+3. **`src/core/hle/service/cfg/cfg.cpp` — `CFG:SecureInfoGetSerialNo`:** when
+   `SecureInfo_A` is absent, write a stable serial (`"SYS"` + 9 digits derived
+   from the console unique ID) instead of `NotFound`. Matches the format the ACT
+   module's `ReadSerialNumber` expects (3 alpha chars + decimal digits).
+4. **`src/core/hle/service/service.cpp` — `AttemptLLE`:** the previous HLE
+   fallback gate was **removed** — with the synthesized identity the LLE modules
+   (ACT/BOSS/CECD/FRD/NIM) can boot, so recommended-LLE again loads real firmware
+   for everyone (with or without a dump), restoring online-capable behavior for
+   dump users while making NUS-only installs boot.
+5. **`src/ios/AzaharBridge/ios_bridge.mm`:** removed the fabricated ACT save data
+   (`00010038` binary `persisid.dat`/`transid.dat`/`uuid.dat`/`account.dat`) —
+   the real ACT module self-initializes its KVS text files on first boot, and the
+   binary blobs were garbage it would reject and recreate anyway.
+6. **`src/core/hle/service/act/act.cpp` — `GetAccountInfo`:** zero-fills the
+   requested block in the output buffer (HLE path), so the Home Menu's account
+   library gets a valid "fresh console, no NNID" response.
+
+Boot flow on a NUS-only install now: the five online modules load as LLE, the ACT
+module reads its device info (all synthesized), self-initializes its save data,
+and the Home Menu proceeds.
+
+### 7.5 Remaining limits / future work
+
+The synthesized identity is **locally sufficient** — the ACT module boots and the
+Home Menu's account library sees a fresh console with no NNID. Real online
+features (NNID registration, eShop, friends) still require Nintendo's servers and
+real console unique data (OTP / `SecureInfo_A` / `LocalFriendCodeSeed_B` from a
+full NAND dump), since the synthesized cert is not signed by Nintendo's CA. Both
+refs treat that as out-of-scope.

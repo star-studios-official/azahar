@@ -36,6 +36,7 @@
 #include "core/hle/service/am/am_net.h"
 #include "core/hle/service/am/am_sys.h"
 #include "core/hle/service/am/am_u.h"
+#include "core/hle/service/cfg/cfg.h"
 #include "core/hle/service/fs/archive.h"
 #include "core/hle/service/fs/fs_user.h"
 #include "core/hw/aes/key.h"
@@ -59,6 +60,46 @@ constexpr u32 TID_HIGH_DLC = 0x0004008C;
 
 constexpr u8 OWNERSHIP_DOWNLOADED = 0x01;
 constexpr u8 OWNERSHIP_OWNED = 0x02;
+
+namespace {
+
+// Synthesizes a device ID when no OTP dump is available, derived from the CFG
+// console unique ID so it is stable across boots. System modules run as LLE
+// (e.g. ACT) call AM:GetDeviceID during boot; without an OTP dump this would
+// fail, so we provide a stable synthesized value instead.
+u32 SynthesizeDeviceID(Core::System& system) {
+    const u64 console_id = Service::CFG::GetModule(system)->GetConsoleUniqueId();
+    u32 device_id = static_cast<u32>(console_id & 0xFFFFFFFF);
+    if (device_id == 0) {
+        device_id = 0x53415953; // "SYS" fallback, should never happen
+    }
+    return device_id;
+}
+
+// Synthesizes a structurally valid 384-byte ECC device certificate when no
+// OTP/CT cert is available. The ACT module (which calls AM:GetDeviceCert at
+// boot) only base64-encodes the cert and stores it locally; it is never
+// verified against Nintendo's CA locally, so a well-formed self-signed cert
+// with a fresh keypair is sufficient to boot.
+std::vector<u8> SynthesizeDeviceCert(Core::System& system) {
+    constexpr const char* issuer_str = "Nintendo CA - G3_NintendoCTR2prod";
+    constexpr const char* name_format = "CT{:08X}-00";
+    std::array<u8, 0x40> issuer{};
+    std::memcpy(issuer.data(), issuer_str, std::strlen(issuer_str));
+    const u32 device_id = SynthesizeDeviceID(system);
+    const std::string name_str = fmt::format(name_format, device_id);
+    std::array<u8, 0x40> name{};
+    std::memcpy(name.data(), name_str.data(), name_str.size());
+
+    auto keypair = HW::ECC::GenerateKeyPair();
+    FileSys::Certificate cert;
+    cert.BuildECC(issuer, name, 0xFFFFFFFF, keypair.first, HW::ECC::Signature{});
+    // Self-sign the body so Serialize() returns a full 384-byte certificate.
+    cert.SetSignatureECC(cert.Sign(cert.SerializeBody()));
+    return cert.Serialize();
+}
+
+} // namespace
 
 struct ContentInfo {
     u16_le index;
@@ -2833,14 +2874,17 @@ void Module::Interface::GetDeviceID(Kernel::HLERequestContext& ctx) {
     LOG_DEBUG(Service_AM, "");
 
     const auto& otp = HW::UniqueData::GetOTP();
-    if (!otp.Valid()) {
-        IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
-        rb.Push(Result(ErrorDescription::NotFound, ErrorModule::AM, ErrorSummary::NotFound,
-                       ErrorLevel::Permanent));
-        return;
+    u32 deviceID;
+    if (otp.Valid()) {
+        deviceID = otp.GetDeviceID();
+    } else {
+        // No OTP dump (e.g. NUS-only system files install): synthesize a
+        // stable device ID from the CFG console unique ID so LLE system
+        // modules (e.g. ACT) can boot.
+        deviceID = SynthesizeDeviceID(am->system);
+        LOG_WARNING(Service_AM, "OTP not available, using synthesized device ID {:08X}",
+                    deviceID);
     }
-
-    u32 deviceID = otp.GetDeviceID();
     if (am->force_new_device_id || am->force_old_device_id) {
         if (am->force_new_device_id) {
             deviceID |= 0x80000000;
@@ -4506,15 +4550,18 @@ void Module::Interface::GetDeviceCert(Kernel::HLERequestContext& ctx) {
 
     LOG_DEBUG(Service_AM, "");
 
+    std::vector<u8> ct_cert_bin;
     const auto& ct_cert = HW::UniqueData::GetCTCert();
-    if (!ct_cert.IsValid()) {
-        IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
-        rb.Push(Result(ErrorDescription::NotFound, ErrorModule::AM, ErrorSummary::NotFound,
-                       ErrorLevel::Permanent));
-        return;
+    if (ct_cert.IsValid()) {
+        ct_cert_bin = ct_cert.Serialize();
+    } else {
+        // No OTP/CT cert (e.g. NUS-only system files install): synthesize a
+        // well-formed 384-byte device certificate so LLE system modules
+        // (e.g. ACT) can boot. The cert is only base64-encoded and stored
+        // locally by the ACT module, never verified against Nintendo's CA.
+        ct_cert_bin = SynthesizeDeviceCert(am->system);
+        LOG_WARNING(Service_AM, "CT cert not available, using synthesized device certificate");
     }
-
-    auto ct_cert_bin = ct_cert.Serialize();
 
     buffer.Write(ct_cert_bin.data(), 0, std::min(ct_cert_bin.size(), buffer.GetSize()));
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 2);
