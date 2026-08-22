@@ -249,65 +249,6 @@ struct SettingsView: View {
                     )
                 }
                 
-                // External Display (AirPlay/HDMI)
-                settingsSection("External Display", icon: "tv") {
-                    ExternalDisplaySettingsSection()
-
-                    Divider().background(Color.white.opacity(0.3))
-
-                    // Display mode picker
-                    Picker("Display Mode", selection: Binding(
-                        get: { DisplayManager.shared.displayMode },
-                        set: { DisplayManager.shared.displayMode = $0 }
-                    )) {
-                        ForEach(ExternalDisplayMode.allCases) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-                    .pickerStyle(.menu)
-
-                    // Current mode description
-                    Text(DisplayManager.shared.displayMode.description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 4)
-
-                    // Connection status
-                    HStack {
-                        Image(systemName: DisplayManager.shared.isExternalDisplayConnected ? "tv.fill" : "tv.slash")
-                            .foregroundStyle(DisplayManager.shared.isExternalDisplayConnected ? .green : .secondary)
-                        Text(DisplayManager.shared.isExternalDisplayConnected ? "External Display Connected" : "No External Display Connected")
-                            .foregroundStyle(DisplayManager.shared.isExternalDisplayConnected ? .primary : .secondary)
-                        Spacer()
-                        if DisplayManager.shared.isExternalDisplayConnected,
-                           let bounds = DisplayManager.shared.externalScreen?.bounds {
-                            Text("\(Int(bounds.width))×\(Int(bounds.height))")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 4)
-
-                    // Resolution info
-                    if DisplayManager.shared.isExternalDisplayConnected,
-                       let screen = DisplayManager.shared.externalScreen {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("External Display Resolution:")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text("\(Int(screen.bounds.width)) × \(Int(screen.bounds.height)) @ \(screen.scale)x scale (native: \(screen.nativeScale)x)")
-                                .font(.caption)
-                                .foregroundStyle(.primary)
-                            if let mode = screen.currentMode {
-                                Text("Mode: \(Int(mode.size.width)) × \(Int(mode.size.height))")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                }
-                
                 // Controller Settings
                 settingsSection("Controller", icon: "gamecontroller.fill") {
                     NavigationLink {
@@ -496,13 +437,6 @@ struct SettingsView: View {
                         title: "Log Stack Traces",
                         description: "Include stack traces in crash reports",
                         group: "Debugging", key: "log_stack_trace"
-                    )
-                    
-                    // Category-specific logging options
-                    SettingToggle(
-                        title: "External Display Logging",
-                        description: "Log HDMI/AirPlay connection events and diagnostics to separate log file",
-                        group: "Debugging", key: "external_display_logging"
                     )
                     
                     SettingToggle(
@@ -773,62 +707,4 @@ struct SettingSlider: View {
     }
 }
 
-/// External Display settings section
-struct ExternalDisplaySettingsSection: View {
-    @ObservedObject var displayManager = DisplayManager.shared
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Connection status
-            HStack {
-                Image(systemName: displayManager.isExternalDisplayConnected ? "tv.fill" : "tv")
-                    .foregroundStyle(displayManager.isExternalDisplayConnected ? .green : .secondary)
-                Text(displayManager.isExternalDisplayConnected ? "External Display Connected" : "No External Display (Settings Available)")
-                    .foregroundStyle(displayManager.isExternalDisplayConnected ? .primary : .secondary)
-            }
-            .font(.subheadline)
-            .padding(.vertical, 4)
-
-            // Display mode picker - ALWAYS AVAILABLE
-            Picker("Display Mode", selection: Binding(
-                get: { displayManager.displayMode },
-                set: { displayManager.displayMode = $0 }
-            )) {
-                ForEach(ExternalDisplayMode.allCases) { mode in
-                    Text(mode.displayName).tag(mode)
-                }
-            }
-            .pickerStyle(.menu)
-
-            // Description of current mode
-            Text(displayManager.displayMode.description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 4)
-
-            if displayManager.isExternalDisplayConnected {
-                if let screen = displayManager.externalScreen {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("External Display Resolution:")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("\(Int(screen.bounds.width)) × \(Int(screen.bounds.height)) @ \(screen.scale)x scale (native: \(screen.nativeScale)x)")
-                            .font(.caption)
-                            .foregroundStyle(.primary)
-                        if let mode = screen.currentMode {
-                            Text("Mode: \(Int(mode.size.width)) × \(Int(mode.size.height))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-            } else {
-                Text("Settings will apply when external display is connected via AirPlay, HDMI, or USB-C")
-                    .font(.caption)
-                    .foregroundStyle(.blue)
-                    .padding(.vertical, 4)
-            }
-        }
-    }
-}

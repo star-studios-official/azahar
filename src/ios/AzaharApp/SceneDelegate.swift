@@ -22,6 +22,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             window.makeKeyAndVisible()
             
             AppLogger.info("[SceneDelegate] Main scene initialized")
+
+            // Reset any unsafe layout settings persisted by the old external
+            // display code (SeparateWindows crashes without a secondary window).
+            DisplayManager.resetLayoutIfNeeded()
         }
     }
     

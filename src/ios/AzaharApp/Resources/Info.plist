@@ -52,15 +52,7 @@
                     <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
                 </dict>
             </array>
-            <key>UIWindowSceneSessionRoleExternalDisplay</key>
-            <array>
-                <dict>
-                    <key>UISceneConfigurationName</key>
-                    <string>External Display Configuration</string>
-                    <key>UISceneDelegateClassName</key>
-                    <string>$(PRODUCT_MODULE_NAME).ExternalSceneDelegate</string>
-                </dict>
-            </array>
+
         </dict>
     </dict>
     <key>UILaunchScreen</key>
