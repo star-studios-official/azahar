@@ -76,6 +76,15 @@ void ARM_FastInterp::Run() {
     while (!halted_ && timer->GetDowncount() > 0) {
         u32 pc = state_.PC();
 
+        // Align the PC before fetching: a thread context loaded from an entry
+        // point carries the Thumb mode bit in bit 0 (ResetThreadContext stores
+        // it raw), so the stored PC can be odd. Real hardware never executes
+        // from a misaligned PC - DynCom masks at dispatch and Dynarmic at
+        // fetch - so clear the mode bit here or the first fetch goes
+        // misaligned and every instruction after it decodes as garbage.
+        pc &= state_.thumb_mode ? ~1u : ~3u;
+        state_.SetPC(pc);
+
         // PC in unmapped memory: consume the slice so other threads still run
         if (!state_.page_pointers[pc >> 12]) {
             static u32 unmapped_pc_count = 0;
@@ -124,6 +133,11 @@ void ARM_FastInterp::Run() {
 
 void ARM_FastInterp::Step() {
     u32 pc = state_.PC();
+
+    // Align the PC for the fetch (see Run()): a context loaded from a Thumb
+    // entry point can leave bit 0 set in the stored PC.
+    pc &= state_.thumb_mode ? ~1u : ~3u;
+    state_.SetPC(pc);
 
     // Decode single instruction block
     BasicBlock* block = cache_.Lookup(pc);
@@ -1161,6 +1175,10 @@ void ARM_FastInterp::LoadContext(const ThreadContext& ctx) {
         state_.regs[i] = ctx.cpu_registers[i];
     }
     SetCPSR(ctx.cpsr);
+    // Clear the mode bit from the loaded PC: ThreadContext stores Thumb entry
+    // points with bit 0 set, but execution must always fetch from an aligned
+    // address. thumb_mode is now known from the CPSR T bit above.
+    state_.regs[15] &= state_.thumb_mode ? ~1u : ~3u;
     for (int i = 0; i < 64; i++) {
         state_.vfp_regs[i] = ctx.fpu_registers[i];
     }

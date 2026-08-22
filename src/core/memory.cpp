@@ -580,6 +580,23 @@ void MemorySystem::UnmappedAccess(const VAddr vaddr, const T value, bool read) {
                                message.c_str());
     }
 
+    // Log each unique fault once: a misbehaving guest (e.g. executing from a
+    // desynced PC) can otherwise hammer the same unmapped access millions of
+    // times and balloon the log to hundreds of megabytes.
+    static std::array<u64, 64> seen{};
+    static u32 seen_count = 0;
+    const u64 key = (static_cast<u64>(vaddr) << 32) ^ impl->GetPC() ^ (static_cast<u64>(sizeof(T)) << 8) ^
+                    (read ? 1 : 0);
+    for (u32 i = 0; i < seen_count; i++) {
+        if (seen[i] == key) {
+            return;
+        }
+    }
+    if (seen_count >= seen.size()) {
+        return;
+    }
+    seen[seen_count++] = key;
+
     LOG_ERROR(HW_Memory, "{}", message);
 }
 
