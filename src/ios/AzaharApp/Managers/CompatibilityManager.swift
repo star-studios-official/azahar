@@ -68,14 +68,15 @@ class CompatibilityManager {
             // Map compatibility values from database format to our internal ratings:
             // Database: 99 = Perfect, 5 = Great, 4 = Good, 3 = Okay, 2 = Bad, 1 = Won't Boot, 0 = Unknown
             // Our enum: 6 = Excellent, 5 = Great, 4 = Good, 3 = Okay, 2 = Bad, 1 = Won't Boot, 0 = Unknown
+
             let rating: Int
             switch compatibility {
-            case 99: rating = 6  // Perfect → Excellent
-            case 5: rating = 5   // Great
-            case 4: rating = 4   // Good  
+            case 0: rating = 6  // Perfect → Excellent
+            case 1: rating = 5   // Great
+            case 2: rating = 4   // Good
             case 3: rating = 3   // Okay
-            case 2: rating = 2   // Bad
-            case 1: rating = 1   // Won't Boot
+            case 4: rating = 2   // Bad
+            case 5: rating = 1   // Won't Boot
             default: rating = 0  // Unknown (includes 0 and any other values)
             }
             

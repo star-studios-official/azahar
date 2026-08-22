@@ -5716,7 +5716,7 @@
     "title": "Netflix"
   },
   {
-    "compatibility": 1,
+    "compatibility": 0,
     "directory": "new-super-mario-bros-2",
     "releases": [
       {"id": "000400000007AE00"},
@@ -5976,10 +5976,12 @@
     "title": "PAC-MAN & Galaga Dimensions"
   },
   {
-    "compatibility": 1,
+    "compatibility": 5,
     "directory": "pac-man-and-the-ghostly-adventures",
     "releases": [
-      {"id": "00040000000F1200"}
+      {"id": "00040000000F1200"},
+      {"id": "00040000000F4300"},
+      {"id": "00040000000F5400"}
     ],
     "title": "PAC-MAN and the Ghostly Adventures"
   },
@@ -6768,7 +6770,7 @@
     "title": "Pokémon Trading Card Game"
   },
   {
-    "compatibility": 99,
+    "compatibility": 1,
     "directory": "pokemon-ultra-moon",
     "releases": [
       {"id": "00040000001B5100"}
@@ -6776,7 +6778,7 @@
     "title": "Pokémon Ultra Moon"
   },
   {
-    "compatibility": 99,
+    "compatibility": 1,
     "directory": "pokemon-ultra-sun",
     "releases": [
       {"id": "00040000001B5000"}
@@ -8449,7 +8451,7 @@
     "title": "Super Little Acorns 3D Turbo"
   },
   {
-    "compatibility": 3,
+    "compatibility": 1,
     "directory": "super-mario-3d-land",
     "releases": [
       {"id": "0004000000054000"},
@@ -9736,7 +9738,7 @@
   },
   {
     "compatibility": 99,
-    "ddirectory": "zeus-quest-remastered",
+    "directory": "zeus-quest-remastered",
     "releases": [
       {"id": "000400000F70CA00"}
     ],

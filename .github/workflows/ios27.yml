@@ -122,6 +122,20 @@ jobs:
             echo "Copied entitlements to app bundle"
           fi
           
+          # Embed entitlements into _CodeSignature/ so sideloading tools
+          # (PlumeImpactor, AltStore, etc.) can find and re-sign with them.
+          # This mimics what code signing would normally produce.
+          if [ -f "src/ios/AzaharApp/Resources/Azahar.entitlements" ]; then
+            mkdir -p "$APP_PATH/_CodeSignature"
+            plutil -convert binary1 \
+              -o "$APP_PATH/_CodeSignature/entitlements.plist" \
+              "src/ios/AzaharApp/Resources/Azahar.entitlements"
+            echo "Embedded entitlements in _CodeSignature/entitlements.plist"
+            # Verify the embedded entitlements
+            echo "Embedded entitlements contents:"
+            plutil -p "$APP_PATH/_CodeSignature/entitlements.plist"
+          fi
+          
           # Create IPA directory structure
           mkdir -p artifacts/Payload
           
@@ -149,7 +163,11 @@ jobs:
           
           # Verify IPA contents
           echo "IPA contents:"
-          unzip -l artifacts/Azahar.ipa | grep -E "(Info.plist|Assets.car|AppIcon|Azahar$|entitlements)" | head -30
+          unzip -l artifacts/Azahar.ipa | grep -E "(Info.plist|Assets.car|AppIcon|Azahar$|entitlements|_CodeSignature)" | head -30
+          
+          # Verify entitlements are embedded
+          echo "Checking for embedded entitlements:"
+          unzip -l artifacts/Azahar.ipa | grep -i entitlements || echo "Warning: No entitlements found in IPA"
           
           # Show IPA size
           ls -lh artifacts/Azahar.ipa
