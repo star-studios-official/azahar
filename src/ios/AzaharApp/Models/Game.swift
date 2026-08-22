@@ -45,15 +45,77 @@ enum GameScanner {
     static func scan(userDirectory: String) -> [Game] {
         var games: [Game] = []
 
-        // Scan SDMC directory for installed titles
-        let sdmcTitles = (userDirectory as NSString).appendingPathComponent(
-            "sdmc/Nintendo 3DS/00000000000000000000000000000000/"
-            + "00000000000000000000000000000000/title/00040000"
-        )
-        games.append(contentsOf: scanDirectory(sdmcTitles, mediaType: Int32(AZ_MEDIA_TYPE_SDMC)))
+        // The emulator stores data under Documents/Azahar/, while
+        // userDirectory is the raw Documents path.  Build paths that
+        // match the actual layout on disk.
+        let azaharDir = (userDirectory as NSString).appendingPathComponent("Azahar")
 
-        // Scan NAND directory
-        let nandTitles = (userDirectory as NSString).appendingPathComponent(
+        // Use the bridge to enumerate installed titles (CIA installs
+        // to SDMC via AM).  This uses the same FileUtil::GetUserPath
+        // logic as the C++ core, so paths are always correct.
+        let maxInstalled = 512
+        var installedPaths = [az_game_path](repeating: az_game_path(), count: maxInstalled)
+        let installedCount = az_get_installed_game_paths(&installedPaths, Int32(maxInstalled))
+        for i in 0..<Int(installedCount) {
+            let cPath = installedPaths[i].path
+            guard let path = cPath else { continue }
+            let fullPath = String(cString: path)
+            let mediaType = Int32(installedPaths[i].media_type)
+            // Extract metadata via bridge
+            var metadata = az_game_metadata()
+            let hasMetadata = az_get_game_metadata(fullPath, &metadata)
+
+            let title: String
+            let publisher: String
+            let playTime: Int64
+            let titleId: UInt64
+
+            if hasMetadata {
+                title = withUnsafePointer(to: &metadata.title) { ptr in
+                    ptr.withMemoryRebound(to: CChar.self, capacity: 256) {
+                        String(cString: $0)
+                    }
+                }
+                publisher = withUnsafePointer(to: &metadata.publisher) { ptr in
+                    ptr.withMemoryRebound(to: CChar.self, capacity: 256) {
+                        String(cString: $0)
+                    }
+                }
+                playTime = metadata.play_time_seconds
+                titleId = metadata.title_id
+            } else {
+                title = (fullPath as NSString).lastPathComponent
+                publisher = ""
+                playTime = 0
+                let tid = az_get_title_id(fullPath)
+                titleId = UInt64(bitPattern: tid)
+            }
+
+            // Extract icon
+            let iconSize = 48 * 48
+            var iconData = [UInt16](repeating: 0, count: iconSize)
+            let pixelCount = az_get_game_icon(fullPath, &iconData, Int32(iconSize))
+
+            var iconImageData: Data? = nil
+            if pixelCount == iconSize {
+                iconImageData = createPNGFromRGB565(iconData, width: 48, height: 48)
+            }
+
+            games.append(Game(
+                path: fullPath,
+                title: title,
+                titleId: titleId,
+                mediaType: mediaType,
+                publisher: publisher,
+                playTimeSeconds: playTime,
+                iconImage: iconImageData
+            ))
+        }
+
+
+
+        // Scan NAND titles (Home Menu, system applets, etc.)
+        let nandTitles = (azaharDir as NSString).appendingPathComponent(
             "nand/00000000000000000000000000000000/title/00040000"
         )
         games.append(contentsOf: scanDirectory(nandTitles, mediaType: Int32(AZ_MEDIA_TYPE_NAND)))

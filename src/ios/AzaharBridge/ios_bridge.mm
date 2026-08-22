@@ -1408,6 +1408,72 @@ int az_get_system_title_ids(int system_type, int region, uint64_t* out_titles, i
 void az_init_system_save_data(void) {
     LOG_INFO(Frontend, "[System] Initializing system save data...");
 
+    // Pre-create NAND system save data directories that the Home Menu expects.
+    // On a real 3DS these are created by FS::CreateSystemSaveData, but on iOS
+    // the archive factory may not be ready in time, so we create the on-disk
+    // structure eagerly.
+    {
+        std::string nand_data = FileUtil::GetUserPath(FileUtil::UserPath::NANDDir) + "/data/00000000000000000000000000000000/sysdata";
+
+        // 0x00010032 = system config (CFG) save data
+        std::string cfg_dir = nand_data + "/00010032/00000000";
+        FileUtil::CreateFullPath(cfg_dir + "/placeholder");
+        // Create a minimal config file so the Home Menu can open it.
+        // CFG::UpdateConfigNANDSavegame will overwrite with real data.
+        {
+            std::string config_path = cfg_dir + "/config";
+            if (!FileUtil::Exists(config_path)) {
+                File::IOFile f(config_path, "wb");
+                // Write a minimal 0x800-byte config block (zeroed)
+                std::vector<u8> zeroes(0x800, 0);
+                f.WriteBytes(zeroes.data(), zeroes.size());
+            }
+        }
+        {
+            std::string account_path = cfg_dir + "/1/account";
+            if (!FileUtil::Exists(account_path)) {
+                FileUtil::CreateFullPath(account_path);
+            }
+        }
+
+        // 0x0001002C = account / NN save data
+        std::string acct_dir = nand_data + "/0001002C/00000000";
+        FileUtil::CreateFullPath(acct_dir + "/placeholder");
+        {
+            std::string p;
+            p = acct_dir + "/account.dat";
+            if (!FileUtil::Exists(p)) {
+                File::IOFile f(p, "wb");
+                std::vector<u8> zeroes(0x200, 0);
+                f.WriteBytes(zeroes.data(), zeroes.size());
+            }
+            p = acct_dir + "/hash.dat";
+            if (!FileUtil::Exists(p)) {
+                File::IOFile f(p, "wb");
+                std::vector<u8> zeroes(0x100, 0);
+                f.WriteBytes(zeroes.data(), zeroes.size());
+            }
+            p = acct_dir + "/initacc.dat";
+            if (!FileUtil::Exists(p)) {
+                File::IOFile f(p, "wb");
+                std::vector<u8> zeroes(0x100, 0);
+                f.WriteBytes(zeroes.data(), zeroes.size());
+            }
+            p = acct_dir + "/autodbg.dat";
+            if (!FileUtil::Exists(p)) {
+                File::IOFile f(p, "wb");
+                std::vector<u8> zeroes(0x100, 0);
+                f.WriteBytes(zeroes.data(), zeroes.size());
+            }
+        }
+
+        // 0x00010026 = CEC / StreetPass save data
+        std::string cec_dir = nand_data + "/00010026/00000000/CEC/TMP";
+        FileUtil::CreateFullPath(cec_dir + "/placeholder");
+
+        LOG_INFO(Frontend, "[System] Pre-created NAND sysdata directories");
+    }
+
     auto& system = Core::System::GetInstance();
     auto cfg = Service::CFG::GetModule(system);
 

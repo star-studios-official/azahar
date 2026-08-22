@@ -3,7 +3,7 @@
 doc-build/
 build-*/
 opencodeazahar
-
+.agents/
 ref/
 reference/
 # NSIS built executables
