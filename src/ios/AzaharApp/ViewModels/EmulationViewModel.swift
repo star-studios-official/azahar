@@ -176,7 +176,7 @@ final class EmulationViewModel: ObservableObject {
     func cycleLayout() {
         // LayoutOption: 0=Default, 1=SingleScreen, 2=LargeScreen, 3=SideScreen,
         // 4=SeparateWindows (unsafe - needs secondary window), 5=HybridScreen, 6=CustomLayout
-        let safeLayouts: [Int32] = [0, 1, 2, 3, 5]  // Skip 4 (SeparateWindows) and 6 (Custom)
+        let safeLayouts: [Int] = [0, 1, 2, 3, 5]  // Skip 4 (SeparateWindows) and 6 (Custom)
         let current = az_setting_get_int("Layout", "layout_option", 2)
         
         // Find next valid layout in the cycle
