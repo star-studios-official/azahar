@@ -53,7 +53,7 @@ final class EmulationViewModel: ObservableObject {
             AppLogger.debug("System region: \(region)")
             path = String(cString: az_get_home_menu_path(region))
             AppLogger.info("Home Menu path resolved: \(path)")
-            if path.isEmpty {
+            if !FileManager.default.fileExists(atPath: path) {
                 AppLogger.error("Home Menu", message: "Home Menu not installed for region \(region)")
                 isRunning = false
                 isLoading = false

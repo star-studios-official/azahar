@@ -226,16 +226,15 @@ final class AppState: ObservableObject {
         // Mirrors Android's SystemSaveGame.load()
         az_init_system_save_data()
         
-        // Find the first region that has a Home Menu installed
+        // Find the first region that has a Home Menu installed.
+        // az_get_home_menu_path always returns a path string, so we must
+        // check the file actually exists for the region.
         var homeMenuPath = ""
         var homeMenuRegion = 1 // Default to USA
-        for region in 0..<7 {
-            let path = String(cString: az_get_home_menu_path(Int32(region)))
-            if !path.isEmpty {
-                homeMenuPath = path
-                homeMenuRegion = region
-                break
-            }
+        for region in 0..<7 where az_system_files_region_available(Int32(region)) {
+            homeMenuPath = String(cString: az_get_home_menu_path(Int32(region)))
+            homeMenuRegion = region
+            break
         }
         
         guard !homeMenuPath.isEmpty else {

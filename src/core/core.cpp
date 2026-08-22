@@ -531,12 +531,7 @@ System::ResultStatus System::Init(Frontend::EmuWindow& emu_window,
 
     exclusive_monitor = MakeExclusiveMonitor(*memory, num_cores);
     cpu_cores.reserve(num_cores);
-    
-    // Check if this title needs DynCom fallback (FastInterp missing instructions)
-    u64 title_id = 0;
-    app_loader->ReadProgramId(title_id);
-    const bool force_dyncom = (title_id == 0x0004003000008F02); // Home Menu uses unimplemented Thumb-2 instructions
-    
+
     if (Settings::values.use_cpu_jit) {
 #if CITRA_ARCH(x86_64) || CITRA_ARCH(arm64)
         for (u32 i = 0; i < num_cores; ++i) {
@@ -551,7 +546,7 @@ System::ResultStatus System::Init(Frontend::EmuWindow& emu_window,
         LOG_WARNING(Core, "CPU JIT requested, but Dynarmic not available");
 #endif
 #ifdef ENABLE_FASTINTERP
-    } else if (Settings::values.use_fastinterp && !force_dyncom) {
+    } else if (Settings::values.use_fastinterp) {
         for (u32 i = 0; i < num_cores; ++i) {
             cpu_cores.push_back(std::make_shared<FastInterp::ARM_FastInterp>(*this, *memory, i,
                                                                              timing->GetTimer(i)));
@@ -562,9 +557,6 @@ System::ResultStatus System::Init(Frontend::EmuWindow& emu_window,
         for (u32 i = 0; i < num_cores; ++i) {
             cpu_cores.push_back(
                 std::make_shared<ARM_DynCom>(*this, *memory, USER32MODE, i, timing->GetTimer(i)));
-        }
-        if (force_dyncom) {
-            LOG_WARNING(Core, "Using DynCom fallback for title {:016X} (FastInterp missing instructions)", title_id);
         }
     }
     running_core = cpu_cores[0].get();

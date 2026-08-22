@@ -1415,11 +1415,11 @@ void az_init_system_save_data(void) {
     {
         std::string nand_data = FileUtil::GetUserPath(FileUtil::UserPath::NANDDir) + "/data/00000000000000000000000000000000/sysdata";
 
-        // 0x00010032 = system config (CFG) save data
-        std::string cfg_dir = nand_data + "/00010032/00000000";
+        // 0x00010017 = Config Savegame (CFG). The CFG module opens this archive
+        // on boot; create the directory and a zeroed config file so
+        // CFG::UpdateConfigNANDSavegame has a place to write real data.
+        std::string cfg_dir = nand_data + "/00010017/00000000";
         FileUtil::CreateFullPath(cfg_dir + "/placeholder");
-        // Create a minimal config file so the Home Menu can open it.
-        // CFG::UpdateConfigNANDSavegame will overwrite with real data.
         {
             std::string config_path = cfg_dir + "/config";
             if (!FileUtil::Exists(config_path)) {
@@ -1427,12 +1427,6 @@ void az_init_system_save_data(void) {
                 // Write a minimal 0x800-byte config block (zeroed)
                 std::vector<u8> zeroes(0x800, 0);
                 f.WriteBytes(zeroes.data(), zeroes.size());
-            }
-        }
-        {
-            std::string account_path = cfg_dir + "/1/account";
-            if (!FileUtil::Exists(account_path)) {
-                FileUtil::CreateFullPath(account_path);
             }
         }
 
@@ -1463,6 +1457,55 @@ void az_init_system_save_data(void) {
             if (!FileUtil::Exists(p)) {
                 FileUtil::IOFile f(p, "wb");
                 std::vector<u8> zeroes(0x100, 0);
+                f.WriteBytes(zeroes.data(), zeroes.size());
+            }
+        }
+
+        // 0x00010038 = ACT (NNID account) save data. The Home Menu's embedded
+        // account library reads persisid.dat / transid.dat / uuid.dat directly
+        // via fs:USER (no act:u IPC) and throws a fatal ACT error if they are
+        // missing, so pre-create them with plausible first-boot values.
+        // account.dat holds the console account (persistent/transferable IDs,
+        // no NNID linked); hash.dat is the (zeroed) account data hash.
+        std::string act_dir = nand_data + "/00010038/00000000";
+        FileUtil::CreateFullPath(act_dir + "/placeholder");
+        {
+            const u32 persistent_id = 0x00000301;
+            const u64 transferable_id = 0x0000000100000001;
+            std::string p;
+            p = act_dir + "/persisid.dat";
+            if (!FileUtil::Exists(p)) {
+                FileUtil::IOFile f(p, "wb");
+                f.WriteBytes(&persistent_id, sizeof(persistent_id));
+            }
+            p = act_dir + "/transid.dat";
+            if (!FileUtil::Exists(p)) {
+                FileUtil::IOFile f(p, "wb");
+                f.WriteBytes(&transferable_id, sizeof(transferable_id));
+            }
+            p = act_dir + "/uuid.dat";
+            if (!FileUtil::Exists(p)) {
+                FileUtil::IOFile f(p, "wb");
+                // RFC9562 version-1 UUID (timestamp + version/variant bits + node)
+                const u8 uuid[16] = {0x10, 0x5E, 0x0A, 0x2C, 0x34, 0x1B, 0x01, 0x10,
+                                     0x80, 0x00, 0x01, 0x00, 0x12, 0x34, 0x56, 0x78};
+                f.WriteBytes(uuid, sizeof(uuid));
+            }
+            p = act_dir + "/account.dat";
+            if (!FileUtil::Exists(p)) {
+                FileUtil::IOFile f(p, "wb");
+                // Console account data: persistent ID at 0x0, transferable ID
+                // base at 0x8 (matches the ACT account data layout), rest zeroed
+                // = a fresh console account with no NNID linked.
+                std::vector<u8> account(0x200, 0);
+                std::memcpy(account.data(), &persistent_id, sizeof(persistent_id));
+                std::memcpy(account.data() + 0x8, &transferable_id, sizeof(transferable_id));
+                f.WriteBytes(account.data(), account.size());
+            }
+            p = act_dir + "/hash.dat";
+            if (!FileUtil::Exists(p)) {
+                FileUtil::IOFile f(p, "wb");
+                std::vector<u8> zeroes(0x20, 0);
                 f.WriteBytes(zeroes.data(), zeroes.size());
             }
         }
