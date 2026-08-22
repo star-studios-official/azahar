@@ -1,0 +1,887 @@
+{
+  "version": 1,
+  "skills": {
+    "accessorysetupkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/accessorysetupkit/SKILL.md",
+      "computedHash": "90911416c4367bb74c58a9852b3e5efabd6b953a8efa020022e6151cd7c37739"
+    },
+    "activitykit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/activitykit/SKILL.md",
+      "computedHash": "fe9123ee512413c0c9441ae40ba8fcc18395730232a40cc6127b8777ec3063e4"
+    },
+    "adattributionkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/adattributionkit/SKILL.md",
+      "computedHash": "7d5c708d27621b83bda0e68c8cd2736ba04f4391d669d9ef1e858d05b8c5ddb6"
+    },
+    "alarmkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/alarmkit/SKILL.md",
+      "computedHash": "a65f446c9df4ce26a666bb3ff67dde86163b53c315fd65f14af2d339fdeb9dfe"
+    },
+    "app-clips": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/app-clips/SKILL.md",
+      "computedHash": "8df5111f82fb07e2c8de43195a3eea41638839c4c46c9120e436d25ca650e84c"
+    },
+    "app-icon-studio": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/app-icon-studio/SKILL.md",
+      "computedHash": "e32d9abfadb34312b52e3195b1ace0c684fd16eccc9c58dc75d9d17d7b857d90"
+    },
+    "app-intents": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/app-intents/SKILL.md",
+      "computedHash": "bb8854141bef73c5fe66b0f83983a50b2e13c6a84b00a47f56916099f85a4a3f"
+    },
+    "app-store-optimization": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/app-store-optimization/SKILL.md",
+      "computedHash": "3d46dd1a0a44ea98a9f1dabaa21c104d6722bb308a6a01a65625c90eadbb6429"
+    },
+    "app-store-review": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/app-store-review/SKILL.md",
+      "computedHash": "564f895241f3c3a38f9962395ddca451a1ecb42912a643f8c01482d2173110f6"
+    },
+    "apple-dev-research": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/apple-dev-research/SKILL.md",
+      "computedHash": "a3d2e279ce7913da80cdfa3ebcba162b08f247766ee0960561e376ef7fa338f2"
+    },
+    "apple-firmware-inspector": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/apple-firmware-inspector/SKILL.md",
+      "computedHash": "b0b32cde0bc2697f0a555da60d39e8e0ef5f4c52ecdd99f9828bf86f0e5f4991"
+    },
+    "apple-on-device-ai": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/apple-on-device-ai/SKILL.md",
+      "computedHash": "0cad4e49558966a9a42a14cef0dc196545f57a49c0f22fab42b185b1a46319b0"
+    },
+    "appmigrationkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/appmigrationkit/SKILL.md",
+      "computedHash": "5a778af31d013d620c0652c2284a9bf60341d19f3dc3084e3e091dde3c768799"
+    },
+    "appstore-ads-operator": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-ads-operator/SKILL.md",
+      "computedHash": "7342b9fb794090c1eed9df922e225fa6d65fb53748e2e172ea501103ec0b9db4"
+    },
+    "appstore-archive-uploader": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-archive-uploader/SKILL.md",
+      "computedHash": "f14b666a5c09aac5f58fc45c65b51c0a09126ad27257d81aac493127894a6bcd"
+    },
+    "appstore-aso-auditor": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-aso-auditor/SKILL.md",
+      "computedHash": "625bb54271c69dc2cc26f0e1cfa9f96d67e08a51761947f03dc1a8d91a0c07d8"
+    },
+    "appstore-build-monitor": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-build-monitor/SKILL.md",
+      "computedHash": "9c2eca71f6f18b23e51bf09fa7fbd6af5e417e41d274053ec02090fcaa0e3928"
+    },
+    "appstore-connect-cli": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-connect-cli/SKILL.md",
+      "computedHash": "3936e1db8b6bafec7e122c7b5c013068d336cd18f8f63f4b8a52d89be48f045c"
+    },
+    "appstore-crash-insights": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-crash-insights/SKILL.md",
+      "computedHash": "5a66992da726991c58faffaf40dfc74a03496a2b6eb067aa24c0365519487b0e"
+    },
+    "appstore-id-resolver": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-id-resolver/SKILL.md",
+      "computedHash": "10f5163a4891f0c8c64caadfa9cc07240eaaddceb28b3f456fec8af140a917b3"
+    },
+    "appstore-metadata-localizer": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-metadata-localizer/SKILL.md",
+      "computedHash": "bea383be7abebaf3cab29763f34685aa0561a6c2ac23039bd786523e18cff5fb"
+    },
+    "appstore-metadata-sync": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-metadata-sync/SKILL.md",
+      "computedHash": "eedc664664cc1e34f910c5de8d2d3129dc36ed9c5d15eef6afd413df9f5cb9e5"
+    },
+    "appstore-notary-runner": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-notary-runner/SKILL.md",
+      "computedHash": "7999a339c76e536f549302cc32ea6aca98d6cd16d10d57c98d8672e67a54a1e5"
+    },
+    "appstore-pricing-planner": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-pricing-planner/SKILL.md",
+      "computedHash": "d552f549b23785f9402159da3224a03cd69d87246913b308bc6c2b6f4ea63638"
+    },
+    "appstore-record-creator": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-record-creator/SKILL.md",
+      "computedHash": "51fa9381fbd2bd637f75b76344f17c66bb0cc088b20572e9015e358c3dd6277e"
+    },
+    "appstore-release-director": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-release-director/SKILL.md",
+      "computedHash": "e01aa96028adf5318ceb451cf51c78f354836517a1d53b95259ff84bfd84f6f4"
+    },
+    "appstore-release-notes-writer": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-release-notes-writer/SKILL.md",
+      "computedHash": "585acca6642894616b92faca1f2ddb0ac2df036cece101c8292991332ccd301f"
+    },
+    "appstore-release-planner": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-release-planner/SKILL.md",
+      "computedHash": "7db12f39379115ca7b3fb1eebdb4df0ef61d6bd79c558c9d0f7b7405c0342dae"
+    },
+    "appstore-revenuecat-sync": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-revenuecat-sync/SKILL.md",
+      "computedHash": "e0f820ffedf50f8427201f9903a15ace89e63c0b032ce2d0777dfbe549813b7a"
+    },
+    "appstore-review-readiness": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-review-readiness/SKILL.md",
+      "computedHash": "6bd3ec4809068e15818b70cadad757cbd3af3cfc4c0609cc04333e9803597530"
+    },
+    "appstore-screenshot-pipeline": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-screenshot-pipeline/SKILL.md",
+      "computedHash": "d439c026c58f6c223a53bb28fafeb0aaccfc948a62c39f533516d986ebd1791a"
+    },
+    "appstore-screenshot-studio": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-screenshot-studio/SKILL.md",
+      "computedHash": "afa575aad59d6b77d5047959842af5566c842c88dc7dd757303c4945faa71d2a"
+    },
+    "appstore-screenshot-validator": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-screenshot-validator/SKILL.md",
+      "computedHash": "3eb27f9aa4f8b3b6559a42a245582f1d52ada7c503f056ddc38495ad3e41e6f4"
+    },
+    "appstore-signing-setup": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-signing-setup/SKILL.md",
+      "computedHash": "1468d53b501ce9ec983368c861a4fc5fb1debd8ba66c5db8ad680f8d988cb131"
+    },
+    "appstore-subscription-localizer": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-subscription-localizer/SKILL.md",
+      "computedHash": "41c0018313af9e8292cea64ae1298b1997e33ee021b222279e749066942b6998"
+    },
+    "appstore-testflight-coordinator": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-testflight-coordinator/SKILL.md",
+      "computedHash": "6003be5e8fa16b77e01ef93fe6607ab8d4989937ef25cef2f6ece249c2c0615d"
+    },
+    "appstore-wall-publisher": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-wall-publisher/SKILL.md",
+      "computedHash": "93b479b8447b7f4fc8072da77824c57f33b4427ed8316c18e51e73a8b7ff96a2"
+    },
+    "appstore-workflow-runner": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/appstore-workflow-runner/SKILL.md",
+      "computedHash": "1b373cbf14aea5b743326235142e7d1886b8cda9323e903794436ba77ebbcf2c"
+    },
+    "audioaccessorykit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/audioaccessorykit/SKILL.md",
+      "computedHash": "cb3c3100b6b46716cbc79fea3d3d6f5a2813396b542831260b8eefc026134d37"
+    },
+    "authentication": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/authentication/SKILL.md",
+      "computedHash": "68deff933b0d74b8065756bcfaa0bee3415785c1fb27bf8ccfe0e47b0c56b405"
+    },
+    "avkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/avkit/SKILL.md",
+      "computedHash": "e040830cb39cf33195847476d6dc1538bc931b65711f4765ac6f96564b1145ef"
+    },
+    "background-processing": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/background-processing/SKILL.md",
+      "computedHash": "cf63df12439afa696ab98374f747ebe1b44732dcd9d575b009f22206aa3adf74"
+    },
+    "browserenginekit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/browserenginekit/SKILL.md",
+      "computedHash": "fc090fb3698192639b58fbeb33113f537c8dc7aa64105716df38763ba29b39da"
+    },
+    "build-swift-apps": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/build-swift-apps/SKILL.md",
+      "computedHash": "064c0b201c4d8851a9adad59b776b48dc306238dd15af9af2d54173f8b3f9fa6"
+    },
+    "callkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/callkit/SKILL.md",
+      "computedHash": "024291a148ac9a8144c57bf352b81e8c227d70efe0ebb8ad858dda24e088bf06"
+    },
+    "carplay": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/carplay/SKILL.md",
+      "computedHash": "8e5bf0c777e276322b8b3d7c2540f44f51f6b34a2f650689fa37ad4d51c23040"
+    },
+    "cloudkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/cloudkit/SKILL.md",
+      "computedHash": "9140f8af0eb2240b9df11db65d208e000562fdfe47ef09540c50beed0b3051d1"
+    },
+    "contacts-framework": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/contacts-framework/SKILL.md",
+      "computedHash": "4bdc5775a4f982e335e10d8c68f02b706fad9296a71fc0ce8343a7cbfe113347"
+    },
+    "core-bluetooth": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/core-bluetooth/SKILL.md",
+      "computedHash": "eeeca95d8f952b1ca342f894e390c6fc7e06bbc4e7cdf2726275079408423ac2"
+    },
+    "core-data": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/core-data/SKILL.md",
+      "computedHash": "a282b61e349113cee976ff5c66952ff6ca3e165e5f07c1877759fadb81f092e1"
+    },
+    "core-motion": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/core-motion/SKILL.md",
+      "computedHash": "3ae51cdbc61e3aeafdb33650113d5d0a64d6212c8397981bd21878737115797e"
+    },
+    "core-nfc": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/core-nfc/SKILL.md",
+      "computedHash": "c6ef246663af6907596fa51a79f218e93eeac3f439b9ea7fd4fceedfae444e81"
+    },
+    "coreml": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/coreml/SKILL.md",
+      "computedHash": "16669e559ce36fe55a40c1cf5504d95c9d054c08ae1e579032896f3566bde0f4"
+    },
+    "cryptokit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/cryptokit/SKILL.md",
+      "computedHash": "14d7a400d9fe10c221d1fca4ff62abfe48069a3da14ce6fac649734882a37cd5"
+    },
+    "cryptotokenkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/cryptotokenkit/SKILL.md",
+      "computedHash": "48cd4f38218b8de5f9a94273139f693822dac5a559f0d079f6e57a5556ab79e4"
+    },
+    "debugging-instruments": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/debugging-instruments/SKILL.md",
+      "computedHash": "ccaa83079af0dd3be7e2a80503f8b419de470a0c5497b6e6053a6a6eb2fa35b7"
+    },
+    "device-integrity": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/device-integrity/SKILL.md",
+      "computedHash": "292f65f157686144f5090d2cda18fefdb4f973d58c7bd5515da4a8de6ee678c3"
+    },
+    "dockkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/dockkit/SKILL.md",
+      "computedHash": "cd6854a9eaad69c9ea01f487b3a9d5c68351337f74b07201071821d155d94201"
+    },
+    "energykit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/energykit/SKILL.md",
+      "computedHash": "cea84a7bc2f09e30be1f6866e04c8e287ad9bb5ca206feb48e198cf7effea80a"
+    },
+    "eventkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/eventkit/SKILL.md",
+      "computedHash": "e042af5dc598f6cf601ed2b5791125ad6407b18304658f9d7784c1c3c748ca2b"
+    },
+    "financekit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/financekit/SKILL.md",
+      "computedHash": "20986124b5dae01ad615c02b8f9941163ba31410c993b789ff9e1f6a8fba5a73"
+    },
+    "focus-engine": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/focus-engine/SKILL.md",
+      "computedHash": "676012857d09a66f05e3424cd70170530dcd2159a690a47d276b5ca9df0a1243"
+    },
+    "gamekit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/gamekit/SKILL.md",
+      "computedHash": "50b65ae717ff78ea57121402cb7efd8a9904a11cf54d33432ab7a42c4b8d6fdc"
+    },
+    "healthkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/healthkit/SKILL.md",
+      "computedHash": "e1c858dde1ba454360059c541f5d9f86a053dab0d340faae033c05c10c2be423"
+    },
+    "homekit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/homekit/SKILL.md",
+      "computedHash": "70319fa0550d943b3c667a14a3a4ee270c0255aa93403277deac75a51c96f80c"
+    },
+    "ios-accessibility": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/ios-accessibility/SKILL.md",
+      "computedHash": "b7d8e7a257de72382f524a6cd59b8230cc852cd487d476c50d7b60b678ba1f4d"
+    },
+    "ios-ettrace-performance": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/ios-ettrace-performance/SKILL.md",
+      "computedHash": "e236244671dce139bb06cda4c2b6406db468137e5497343815c39a56d4c8bd67"
+    },
+    "ios-ettrace-profiler": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/ios-ettrace-profiler/SKILL.md",
+      "computedHash": "b5c9acde4e1ba0cfb195b2d0696810bec95656d7770add4f342ead283abdfc1d"
+    },
+    "ios-intents-architect": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/ios-intents-architect/SKILL.md",
+      "computedHash": "c4ad1c61c5e455430be85687057be7d8146702f5f4f63c16237a769b489e223e"
+    },
+    "ios-liquid-glass-designer": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/ios-liquid-glass-designer/SKILL.md",
+      "computedHash": "d155fc36f31fed7cfef180eecc3546667a4249d7212aa76c587a6a77919c007f"
+    },
+    "ios-localization": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/ios-localization/SKILL.md",
+      "computedHash": "a1a29c5a2e6bc3c27cb3f986957599b29c2c598d9766493e221c59b64e4d9c8a"
+    },
+    "ios-memgraph-analysis": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/ios-memgraph-analysis/SKILL.md",
+      "computedHash": "769b80eff52bcd630744a33fa27da07dd6c2af71e9b64bbba70a3fdb54a7dcce"
+    },
+    "ios-memgraph-inspector": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/ios-memgraph-inspector/SKILL.md",
+      "computedHash": "e5b6f9eb25dbf0cb3162ad1d8ded8163129f62771786a95950f2871cab4111aa"
+    },
+    "ios-networking": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/ios-networking/SKILL.md",
+      "computedHash": "3494fc2f831e290169edbb80f8a1296c738645f242d2b6cc00fdb062177dd2fd"
+    },
+    "ios-rocketsim-operator": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/ios-rocketsim-operator/SKILL.md",
+      "computedHash": "049f4efe0508c930a00f5009b2df04fc095bd40afba1155fff45768da9ae552b"
+    },
+    "ios-simulator": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/ios-simulator/SKILL.md",
+      "computedHash": "992f700cacced89d430e8cca5b0d95f12f16c1b8c3aa06bf419d4ab61509609f"
+    },
+    "ios-simulator-browser": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/ios-simulator-browser/SKILL.md",
+      "computedHash": "da546502c5a26fb84f260af991f47d80b4d58ebdb600e7c0c7e7e0811231d281"
+    },
+    "ios-simulator-debugger": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/ios-simulator-debugger/SKILL.md",
+      "computedHash": "f8fb1ec938b539f2475f1e99ceb44c66e8e0f3b3dbabaaa8af09794a01ee51d9"
+    },
+    "ios-swiftui-architect": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/ios-swiftui-architect/SKILL.md",
+      "computedHash": "64bd69501c3507cf840b9e12e6c413da57b4287b1c35a73701f93b8e5fdba025"
+    },
+    "macos-appkit-bridge": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/macos-appkit-bridge/SKILL.md",
+      "computedHash": "2ed84a4f7f8d444d6ba025f40ea6676dc0d277ea3a118150129d10255e481d0d"
+    },
+    "macos-liquid-glass-designer": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/macos-liquid-glass-designer/SKILL.md",
+      "computedHash": "682b03d6c3dbda9cfed25b2d8411eb3edab42e179463ea0ca36915ab038eadbb"
+    },
+    "macos-notarization-packager": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/macos-notarization-packager/SKILL.md",
+      "computedHash": "86b1b83c6a49202d089c12d59fbea984a7a36ba8535a54da221064b87428c392"
+    },
+    "macos-runtime-debugger": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/macos-runtime-debugger/SKILL.md",
+      "computedHash": "8f6cf2cdbc3ae91c0eec334e997e9fe725d5648a1796b083914867916809e9e0"
+    },
+    "macos-signing-inspector": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/macos-signing-inspector/SKILL.md",
+      "computedHash": "6ffa35eb0d7e2126c25a10d0eac0b866612406f41ffb4e144a85d432977d6dfe"
+    },
+    "macos-swiftpm-runner": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/macos-swiftpm-runner/SKILL.md",
+      "computedHash": "e3a1afe2bf0fd34c2c0ea284e9376688e5230b423a7120f686cdb7867b4cf9e4"
+    },
+    "macos-swiftui-architect": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/macos-swiftui-architect/SKILL.md",
+      "computedHash": "9f32d775446562e5b42ce6ab6861ad30e9ec8f9f80cf51031e5235871d70c78d"
+    },
+    "macos-telemetry-probe": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/macos-telemetry-probe/SKILL.md",
+      "computedHash": "ca311a120a7042e7689234b1a9eece2478b06fafe7a7f6c64e29ab29cf4bca26"
+    },
+    "macos-test-diagnoser": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/macos-test-diagnoser/SKILL.md",
+      "computedHash": "345c3b7a465ed6a24d403d3586401445e3f79bda460377847908f5999f7e2c14"
+    },
+    "macos-view-architect": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/macos-view-architect/SKILL.md",
+      "computedHash": "9707214bf65218160ee478901102a8c22f9e4c3714a23930a5a92a00688a774e"
+    },
+    "macos-window-architect": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/macos-window-architect/SKILL.md",
+      "computedHash": "3434457508098d804f6d3bf7b4f88356c7e7b046a59ca5e5ec4065e568587ad3"
+    },
+    "mapkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/mapkit/SKILL.md",
+      "computedHash": "eb689fc2a6bf11126cdbad25e076e469a7de3654dc41145d46b5d5b120b2fb26"
+    },
+    "metrickit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/metrickit/SKILL.md",
+      "computedHash": "8817c5983c47c970a87006719c5c5b4fd32606dc46acc6e23ac722386bd5903f"
+    },
+    "musickit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/musickit/SKILL.md",
+      "computedHash": "bf7baaddf644037fd68ffae1a76cd5292bbd47b17ae0a1fd7eaf48dc082c19ca"
+    },
+    "natural-language": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/natural-language/SKILL.md",
+      "computedHash": "5895ba69824923aa1d34385b012d17f083f9f98a7f4b53e2383a0e0805d95be9"
+    },
+    "paperkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/paperkit/SKILL.md",
+      "computedHash": "1404164451ae916f032ee57fadf0a71be5cf1f3a8d08cae79b0bdf0b0347fe85"
+    },
+    "passkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/passkit/SKILL.md",
+      "computedHash": "e392a0d972d56bcca6d315a909dc09ee424110af9924822ae8d6b33730b631a3"
+    },
+    "pdfkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/pdfkit/SKILL.md",
+      "computedHash": "ce120d6c32e157a4796a52c55b9ec06ec0b0d614c105d4f3ed745adeb2740e44"
+    },
+    "pencilkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/pencilkit/SKILL.md",
+      "computedHash": "896c38d219df8e6c52fb15e9ecacabf657fd6b1d8ed78027e3cf34a7041c1870"
+    },
+    "permissionkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/permissionkit/SKILL.md",
+      "computedHash": "d335fef33e78609d481c7fa48eedb047e26eea7ddf2c17f44d8374ad919445b8"
+    },
+    "photokit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/photokit/SKILL.md",
+      "computedHash": "77a32bdeeb28448c514af0efc50232dcf5a2884a02d887686de6b13e6467f0df"
+    },
+    "push-notifications": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/push-notifications/SKILL.md",
+      "computedHash": "7afc693b1c38505f6dd9c78048785bc7f07dcb29f5cd971e08dfe8eaeb6ec7c3"
+    },
+    "realitykit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/realitykit/SKILL.md",
+      "computedHash": "24904dcb853a99f6ee602d7a0fd52b22e113e515e35c337c3c18305d60163103"
+    },
+    "relevancekit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/relevancekit/SKILL.md",
+      "computedHash": "013d47112fd21a4896edcfa0bbe967e93240c055a9cca5847303fbf9b5684c42"
+    },
+    "scenekit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/scenekit/SKILL.md",
+      "computedHash": "3a538ff8e615184b531431af6931140144939c6edc4703ebb6805575a5d438a0"
+    },
+    "sensorkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/sensorkit/SKILL.md",
+      "computedHash": "12153a81014fdd308f49ce94154fe26e20b8d8bc2a6234351b49697f33e0a1ed"
+    },
+    "shareplay-activities": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/shareplay-activities/SKILL.md",
+      "computedHash": "44b088ff8ee83977052b214d58d2a4586b9630a14b67bfcf19063e38ff861a53"
+    },
+    "speech-recognition": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/speech-recognition/SKILL.md",
+      "computedHash": "5523ded1ab55913de092684e7c7dc36a759fde5e091d3c7b8cea491563a17a5f"
+    },
+    "spritekit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/spritekit/SKILL.md",
+      "computedHash": "2f35eb80b826cb27255130581333e431833797eabc3359958e79ec0f84de67f4"
+    },
+    "storekit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/storekit/SKILL.md",
+      "computedHash": "11045e9ba82dba68b212458acd7bc1a139def1bfbbcef6670430eabe8beb87ce"
+    },
+    "swift-api-design-guidelines": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swift-api-design-guidelines/SKILL.md",
+      "computedHash": "dbd2eff8e98b213cfc44d26d5a163c03217750757ef17ff24a1c07e4dced65f5"
+    },
+    "swift-architecture": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swift-architecture/SKILL.md",
+      "computedHash": "b9a98b7ccbd34ced49a58d3f16bf782b2b3ee73bcf2574030b0f65c4892461ec"
+    },
+    "swift-charts": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swift-charts/SKILL.md",
+      "computedHash": "e97daf59d75c7b0ec2f2cbee80688cac3f2fcc3c795419fa15bcec41ac935d76"
+    },
+    "swift-codable": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swift-codable/SKILL.md",
+      "computedHash": "b0486cede7e72af09e61a2fd371c530db507cd5410313ad8b99225e0086e65c4"
+    },
+    "swift-concurrency": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swift-concurrency/SKILL.md",
+      "computedHash": "b674cda5ff66657d0957f6d96d927646a4b2d483261ecd2ea4c31a1f947e7d27"
+    },
+    "swift-formatstyle": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swift-formatstyle/SKILL.md",
+      "computedHash": "0d98efd04eb9d39cf534ea1a127545dcdcd963eeee9cd7eade09708e9905e518"
+    },
+    "swift-language": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swift-language/SKILL.md",
+      "computedHash": "152bd68c83ed576cddbf7941fff335a76f3910532b72ce1ba893bceb4b227971"
+    },
+    "swift-security": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swift-security/SKILL.md",
+      "computedHash": "d7f3a79f9f30752e242e99fdd467258610186ecc4043e5ddcc9506be4068744b"
+    },
+    "swift-testing": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swift-testing/SKILL.md",
+      "computedHash": "a8cf4e7e76a04e41a361d342924c4d60674b64cebe5c85b752d67a447e443048"
+    },
+    "swiftdata": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swiftdata/SKILL.md",
+      "computedHash": "fce693f37af15168a48540f92c005026a9df4d92f973f656a57dfd15f2c5860e"
+    },
+    "swiftlint": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swiftlint/SKILL.md",
+      "computedHash": "e2dfb4b34fb3d5051a9eb7842ce3f3db21f8caa43da395354383fcf6248c7aa1"
+    },
+    "swiftpm-build-inspector": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/swiftpm-build-inspector/SKILL.md",
+      "computedHash": "c4fc4260f1430423fb8aeda44b6736c74c8c0272404626073580de0efa77a000"
+    },
+    "swiftui-animation": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swiftui-animation/SKILL.md",
+      "computedHash": "af57bc4f78457178fdadb7a78728baf55aa88d12fcfa0b5bd25cbdbc8dcee3b0"
+    },
+    "swiftui-gestures": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swiftui-gestures/SKILL.md",
+      "computedHash": "00c984b4cf876ad14ac0a274dd8a40190a71b5a747dfa324ad3ba92e3eb270e7"
+    },
+    "swiftui-layout-components": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swiftui-layout-components/SKILL.md",
+      "computedHash": "4bc442bff1253a243dd7b98ed345d41fbfb0f1e6adca41923e669753e9335b7b"
+    },
+    "swiftui-liquid-glass": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swiftui-liquid-glass/SKILL.md",
+      "computedHash": "ef23d30a2ffd155c0cd1ec4a63ccd3bd3841c477658883a1fc408bffb2bd0495"
+    },
+    "swiftui-navigation": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swiftui-navigation/SKILL.md",
+      "computedHash": "1f1ce11a40939e10f82f5337255c703140d67c00aaba0db4d922ca9d687712dd"
+    },
+    "swiftui-patterns": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swiftui-patterns/SKILL.md",
+      "computedHash": "5555a717011b139fd9d067883fe204f9a1defd1d68a881a85be7dccac9763bcd"
+    },
+    "swiftui-performance": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swiftui-performance/SKILL.md",
+      "computedHash": "2dca682decced437172dbd5554c8267576a81960d28d2c87d7b1ce60e878860e"
+    },
+    "swiftui-performance-inspector": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/swiftui-performance-inspector/SKILL.md",
+      "computedHash": "e772fe0c87607eceaaa92b7f83d513909823347826c0f4a6b7b6c123eb7c2765"
+    },
+    "swiftui-uikit-interop": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swiftui-uikit-interop/SKILL.md",
+      "computedHash": "35915265a8056369b657d45319dfea3da05a2fc1cf185b966f33bdb016773c28"
+    },
+    "swiftui-view-architect": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/swiftui-view-architect/SKILL.md",
+      "computedHash": "212468a33af404e0fc0bbddee193e8eeb37650a6c9c7a5735a274eb34bd160be"
+    },
+    "swiftui-webkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/swiftui-webkit/SKILL.md",
+      "computedHash": "08a604819b46a5cbf2d86c8bf1f7db464d6f60e440df79f7dca33c7271d19cda"
+    },
+    "tabletopkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/tabletopkit/SKILL.md",
+      "computedHash": "084499a8d318c37a54509c24b2d992136dff6fed34521c32c1bbf8505b50683d"
+    },
+    "tipkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/tipkit/SKILL.md",
+      "computedHash": "ea49c66bd253bb4475c35d6bbd7b1dd8696bb3c30ccb32cd02ffe8c50d1adf3c"
+    },
+    "tuist-flaky-test-stabilizer": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/tuist-flaky-test-stabilizer/SKILL.md",
+      "computedHash": "7c37510bb76649037e6437a4e4e2bc878f736f1c9be94cfd36e6544e1a1c2fde"
+    },
+    "tuist-generation-doctor": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/tuist-generation-doctor/SKILL.md",
+      "computedHash": "53e48c813fd204e580c02e59571aa2237b44dd86573a1607741b3fc1e0241985"
+    },
+    "tuist-migration-planner": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/tuist-migration-planner/SKILL.md",
+      "computedHash": "00024c37c1a424dc45c4417d72719ae639a51f8c47d825be6a982c2e41524542"
+    },
+    "tuist-workspace-navigator": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/tuist-workspace-navigator/SKILL.md",
+      "computedHash": "0c3a62b1541ea63279167d89dae0f51c85618fb4d4da634552ffe4072c949f8d"
+    },
+    "vision-framework": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/vision-framework/SKILL.md",
+      "computedHash": "3a3dfb5bcd5870c9f3dd76959001dddc78a326ffbc0147abcbe7a26c883eadc9"
+    },
+    "weatherkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/weatherkit/SKILL.md",
+      "computedHash": "0cfa790fdf89194a02ff96ea6996e4347eb3d1238579cd609decde72cce04863"
+    },
+    "widgetkit": {
+      "source": "dpearson2699/swift-ios-skills",
+      "sourceType": "github",
+      "skillPath": "skills/widgetkit/SKILL.md",
+      "computedHash": "e6a255aa3c5a7bc70e114aaf9bf6ed24d4156f786ef0bd1c906058638535bd6f"
+    },
+    "xcode-build-baseline": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/xcode-build-baseline/SKILL.md",
+      "computedHash": "27b0056162507b15dacfc03675106c5bf1be410bcd454654c41d6a3b2bb03424"
+    },
+    "xcode-build-strategist": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/xcode-build-strategist/SKILL.md",
+      "computedHash": "24b0910c6c22bbbdc7634d4c2105bba53a2f349d3e88ebf829aa4e29371da692"
+    },
+    "xcode-build-tuner": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/xcode-build-tuner/SKILL.md",
+      "computedHash": "96b09e2c6aa11ac7d9ff6efffe7c2d57c3bc3ef1af0131c074d3a4c06d3797a8"
+    },
+    "xcode-compile-profiler": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/xcode-compile-profiler/SKILL.md",
+      "computedHash": "aca1cd341ae55ae38afde38fd13f09abfff215b3c488049d20e279ad9218955d"
+    },
+    "xcode-project-auditor": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/xcode-project-auditor/SKILL.md",
+      "computedHash": "2d023ad3baab17ce42b8c9d3c95c8aee575a9e2434b0c8f263bed26653a85122"
+    },
+    "xcode-ui-test-stabilizer": {
+      "source": "Xopoko/build-swift-apps",
+      "sourceType": "github",
+      "skillPath": "skills/xcode-ui-test-stabilizer/SKILL.md",
+      "computedHash": "4a55bde039dad67cf13de6487d81685ba53c0fd213a16e1eefaad7feee66bad8"
+    }
+  }
+}

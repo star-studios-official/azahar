@@ -252,45 +252,45 @@ struct SettingsView: View {
                 // External Display (AirPlay/HDMI)
                 settingsSection("External Display", icon: "tv") {
                     ExternalDisplaySettingsSection()
-                    
+
                     Divider().background(Color.white.opacity(0.3))
-                    
+
                     // Display mode picker
                     Picker("Display Mode", selection: Binding(
-                        get: { ExternalDisplayManager.shared.displayMode },
-                        set: { ExternalDisplayManager.shared.setDisplayMode($0) }
+                        get: { DisplayManager.shared.displayMode },
+                        set: { DisplayManager.shared.displayMode = $0 }
                     )) {
-                        ForEach(ExternalDisplayManager.ExternalDisplayMode.allCases, id: \.self) { mode in
+                        ForEach(ExternalDisplayMode.allCases) { mode in
                             Text(mode.displayName).tag(mode)
                         }
                     }
                     .pickerStyle(.menu)
-                    
+
                     // Current mode description
-                    Text(ExternalDisplayManager.shared.displayMode.description)
+                    Text(DisplayManager.shared.displayMode.description)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 4)
-                    
+
                     // Connection status
                     HStack {
-                        Image(systemName: ExternalDisplayManager.shared.isExternalDisplayConnected ? "tv.fill" : "tv.slash")
-                            .foregroundStyle(ExternalDisplayManager.shared.isExternalDisplayConnected ? .green : .secondary)
-                        Text(ExternalDisplayManager.shared.isExternalDisplayConnected ? "External Display Connected" : "No External Display Connected")
-                            .foregroundStyle(ExternalDisplayManager.shared.isExternalDisplayConnected ? .primary : .secondary)
+                        Image(systemName: DisplayManager.shared.isExternalDisplayConnected ? "tv.fill" : "tv.slash")
+                            .foregroundStyle(DisplayManager.shared.isExternalDisplayConnected ? .green : .secondary)
+                        Text(DisplayManager.shared.isExternalDisplayConnected ? "External Display Connected" : "No External Display Connected")
+                            .foregroundStyle(DisplayManager.shared.isExternalDisplayConnected ? .primary : .secondary)
                         Spacer()
-                        if ExternalDisplayManager.shared.isExternalDisplayConnected,
-                           let bounds = ExternalDisplayManager.shared.externalScreen?.bounds {
+                        if DisplayManager.shared.isExternalDisplayConnected,
+                           let bounds = DisplayManager.shared.externalScreen?.bounds {
                             Text("\(Int(bounds.width))×\(Int(bounds.height))")
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
                     }
                     .padding(.vertical, 4)
-                    
+
                     // Resolution info
-                    if ExternalDisplayManager.shared.isExternalDisplayConnected,
-                       let screen = ExternalDisplayManager.shared.externalScreen {
+                    if DisplayManager.shared.isExternalDisplayConnected,
+                       let screen = DisplayManager.shared.externalScreen {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("External Display Resolution:")
                                 .font(.caption)
@@ -775,8 +775,8 @@ struct SettingSlider: View {
 
 /// External Display settings section
 struct ExternalDisplaySettingsSection: View {
-    @ObservedObject var displayManager = ExternalDisplayManager.shared
-    
+    @ObservedObject var displayManager = DisplayManager.shared
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Connection status
@@ -788,24 +788,24 @@ struct ExternalDisplaySettingsSection: View {
             }
             .font(.subheadline)
             .padding(.vertical, 4)
-            
+
             // Display mode picker - ALWAYS AVAILABLE
             Picker("Display Mode", selection: Binding(
                 get: { displayManager.displayMode },
-                set: { displayManager.setDisplayMode($0) }
+                set: { displayManager.displayMode = $0 }
             )) {
-                ForEach(ExternalDisplayManager.ExternalDisplayMode.allCases, id: \.self) { mode in
+                ForEach(ExternalDisplayMode.allCases) { mode in
                     Text(mode.displayName).tag(mode)
                 }
             }
             .pickerStyle(.menu)
-            
+
             // Description of current mode
             Text(displayManager.displayMode.description)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .padding(.vertical, 4)
-            
+
             if displayManager.isExternalDisplayConnected {
                 if let screen = displayManager.externalScreen {
                     VStack(alignment: .leading, spacing: 2) {

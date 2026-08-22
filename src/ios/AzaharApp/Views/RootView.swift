@@ -70,8 +70,8 @@ final class EmulationHostController: UIHostingController<EmulationView> {
     private var modeObserver: NSObjectProtocol?
 
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        let manager = ExternalDisplayManager.shared
-        if manager.isExternalDisplayConnected && manager.displayMode == .topScreenExternal {
+        let manager = DisplayManager.shared
+        if manager.isExternalDisplayConnected && manager.displayMode == .externalTopScreen {
             return .landscape
         }
         return .all

@@ -106,8 +106,11 @@ set(AZAHAR_SWIFT_SOURCES
     AzaharApp/Utilities/JITEnableContext.swift
     AzaharApp/Utilities/EntitlementChecker.swift
     AzaharApp/Utilities/ExternalDisplayManager.swift
+    AzaharApp/Utilities/DisplayManager.swift
     AzaharApp/Utilities/LocalPlayManager.swift
     AzaharApp/Utilities/AppLogger.swift
+    AzaharApp/Views/ExternalScreenView.swift
+    AzaharApp/Views/ExternalDisplaySettingsView.swift
 )
 
 # ---------------------------------------------------------------------------
