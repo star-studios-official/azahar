@@ -2,6 +2,9 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
+#include <vector>
+
 #include "common/archives.h"
 #include "core/core.h"
 #include "core/hle/ipc_helpers.h"
@@ -56,10 +59,20 @@ void Module::Interface::GetAccountInfo(Kernel::HLERequestContext& ctx) {
     const auto account_slot = rp.Pop<u8>();
     const auto size = rp.Pop<u32>();
     const auto block_id = rp.Pop<u32>();
-    [[maybe_unused]] auto output_buffer = rp.PopMappedBuffer();
+    auto output_buffer = rp.PopMappedBuffer();
 
     LOG_DEBUG(Service_ACT, "(STUBBED) called account_slot={:02X}, size={:08X}, block_id={:08X}",
               account_slot, size, block_id);
+
+    // The caller (e.g. the Home Menu's account library) reads the block data out
+    // of this buffer immediately after the call. Write a zeroed block so it sees
+    // a fresh console account with no NNID linked instead of the previous
+    // contents of the mapped buffer.
+    const u32 write_size = std::min(size, static_cast<u32>(output_buffer.GetSize()));
+    if (write_size > 0) {
+        std::vector<u8> zeroes(write_size, 0);
+        output_buffer.Write(zeroes.data(), 0, write_size);
+    }
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
