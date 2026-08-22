@@ -30,6 +30,7 @@
 #include "common/settings.h"
 #include "common/string_util.h"
 #include "core/core.h"
+#include "core/cheats/cheat_base.h"
 #include "core/frontend/applets/default_applets.h"
 #include "core/frontend/camera/factory.h"
 #include "core/hle/service/am/am.h"
@@ -982,7 +983,7 @@ void az_take_screenshot() {
     const auto width = layout.width;
     const auto height = layout.height;
 
-    const std::string screenshot_dir = FileUtil::GetUserPath(FileUtil::UserPath::ScreenshotsDir);
+    const std::string screenshot_dir = FileUtil::GetUserPath(FileUtil::UserPath::RootDir) + "/screenshots";
     FileUtil::CreateDir(screenshot_dir);
 
     // Generate filename with timestamp
@@ -1417,7 +1418,7 @@ void az_init_system_save_data(void) {
         cfg->SetUsername(Common::UTF8ToUTF16("User"));
         cfg->SetBirthday(1, 1);     // January 1st
         cfg->SetSystemLanguage(Service::CFG::SystemLanguage::LANGUAGE_EN);
-        cfg->SetSoundOutputMode(Service::CFG::SoundOutputMode::Stereo);
+        cfg->SetSoundOutputMode(Service::CFG::SOUND_STEREO);
         cfg->SetCountryCode(0x31);  // US
 
         cfg->SetSystemSetupNeeded(false);
