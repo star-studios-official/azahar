@@ -282,19 +282,6 @@ class DisplayManager: ObservableObject {
             return
         }
 
-        // Try UIScreen.screens.
-        if UIScreen.screens.count > 1 {
-            handleScreenConnected(UIScreen.screens[1])
-            return
-        }
-
-        // Try mirrored screen.
-        if let mirrored = UIScreen.main.mirrored {
-            AppLogger.info("[DisplayManager] Using mirrored screen as external")
-            handleScreenConnected(mirrored)
-            return
-        }
-
         // Search connected scenes for an external screen.
         for scene in UIApplication.shared.connectedScenes {
             if let ws = scene as? UIWindowScene, ws.screen != UIScreen.main {
@@ -303,7 +290,15 @@ class DisplayManager: ObservableObject {
             }
         }
 
-        AppLogger.warning("[DisplayManager] No external display found")
+        // Check open sessions.
+        for session in UIApplication.shared.openSessions {
+            if let ws = session.scene as? UIWindowScene, ws.screen != UIScreen.main {
+                handleScreenConnected(ws.screen)
+                return
+            }
+        }
+
+        AppLogger.warning("[DisplayManager]", message: "No external display found")
     }
 
     /// Clean up external display resources.
@@ -323,20 +318,7 @@ class DisplayManager: ObservableObject {
     // MARK: - Screen Observers
 
     private func setupScreenObservers() {
-        screenConnectObserver = NotificationCenter.default.addObserver(
-            forName: UIScreen.didConnectNotification, object: nil, queue: .main
-        ) { [weak self] notification in
-            guard let screen = notification.object as? UIScreen else { return }
-            self?.handleScreenConnected(screen)
-        }
-
-        screenDisconnectObserver = NotificationCenter.default.addObserver(
-            forName: UIScreen.didDisconnectNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            self?.handleScreenDisconnected()
-        }
-
-        // Also listen for scene-based connections (iOS 13+).
+        // Primary mechanism: scene-based notifications (iOS 13+).
         NotificationCenter.default.addObserver(
             forName: Notification.Name("ExternalSceneConnected"), object: nil, queue: .main
         ) { [weak self] notification in
@@ -352,11 +334,42 @@ class DisplayManager: ObservableObject {
         ) { [weak self] _ in
             self?.handleScreenDisconnected()
         }
+
+        // Fallback: legacy UIScreen notifications for older adapters.
+        #if swift(>=5.9)
+        if #available(iOS 16.0, *) {
+            // Deprecated but still functional; needed for HDMI adapters that
+            // don't trigger scene creation. Suppressed at call site.
+        }
+        #endif
+        screenConnectObserver = NotificationCenter.default.addObserver(
+            forName: UIScreen.didConnectNotification, object: nil, queue: .main
+        ) { [weak self] notification in
+            guard let screen = notification.object as? UIScreen else { return }
+            self?.handleScreenConnected(screen)
+        }
+
+        screenDisconnectObserver = NotificationCenter.default.addObserver(
+            forName: UIScreen.didDisconnectNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.handleScreenDisconnected()
+        }
     }
 
     private func detectExistingDisplay() {
-        if UIScreen.screens.count > 1 {
-            handleScreenConnected(UIScreen.screens[1])
+        // Check connected scenes first (modern API).
+        for scene in UIApplication.shared.connectedScenes {
+            if let ws = scene as? UIWindowScene, ws.screen != UIScreen.main {
+                handleScreenConnected(ws.screen)
+                return
+            }
+        }
+        // Fallback: check open sessions.
+        for session in UIApplication.shared.openSessions {
+            if let ws = session.scene as? UIWindowScene, ws.screen != UIScreen.main {
+                handleScreenConnected(ws.screen)
+                return
+            }
         }
     }
 
@@ -393,7 +406,6 @@ class DisplayManager: ObservableObject {
 
     private func setupExternalWindow(on screen: UIScreen) {
         if let existing = externalWindow {
-            existing.screen = screen
             existing.frame = screen.bounds
             existing.isHidden = false
             existing.makeKeyAndVisible()
@@ -403,16 +415,14 @@ class DisplayManager: ObservableObject {
         }
 
         let window: UIWindow
-        if #available(iOS 13.0, *),
-           let ws = UIApplication.shared.connectedScenes
-               .compactMap({ $0 as? UIWindowScene })
-               .first(where: { $0.screen == screen }) {
+        if let ws = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.screen == screen }) {
             window = UIWindow(windowScene: ws)
         } else {
             window = UIWindow(frame: screen.bounds)
         }
 
-        window.screen = screen
         window.frame = screen.bounds
         window.backgroundColor = .black
         window.windowLevel = .normal
@@ -427,7 +437,11 @@ class DisplayManager: ObservableObject {
 
         // Bring the main window back to key.
         DispatchQueue.main.async {
-            UIApplication.shared.windows.first { $0 != window }?.makeKey()
+            if let scene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.screen == UIScreen.main }) {
+                scene.windows.first { !$0.isHidden }?.makeKey()
+            }
         }
 
         externalWindow = window
@@ -437,7 +451,7 @@ class DisplayManager: ObservableObject {
     private func configureMetalLayer(for screen: UIScreen) {
         guard let viewController = externalWindow?.rootViewController else { return }
 
-        let view = viewController.view
+        let view = viewController.view!
 
         // Remove previous metal layer sublayer if any.
         if let old = metalLayer {

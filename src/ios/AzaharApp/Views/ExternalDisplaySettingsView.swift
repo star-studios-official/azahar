@@ -97,7 +97,7 @@ struct ExternalDisplaySettingsView: View {
                             }
                         }
                         .pickerStyle(.segmented)
-                        .onChange(of: layoutPreset) { newPreset in
+                        .onChange(of: layoutPreset) { _, newPreset in
                             displayManager.externalLayout = newPreset.config
                         }
 
@@ -262,12 +262,12 @@ struct LayoutPreviewView: View {
                         .fill(Color.blue.opacity(0.3))
                         .frame(width: frames.top.size.width, height: frames.top.size.height)
                         .overlay(Text("Top").font(.caption2))
-                        .position(frames.top.centerX, frames.top.centerY)
+                        .position(x: frames.top.centerX, y: frames.top.centerY)
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color.green.opacity(0.3))
                         .frame(width: frames.bottom.size.width, height: frames.bottom.size.height)
                         .overlay(Text("Bottom").font(.caption2))
-                        .position(frames.bottom.centerX, frames.bottom.centerY)
+                        .position(x: frames.bottom.centerX, y: frames.bottom.centerY)
 
                 case .externalLargeTopSmallBottom:
                     let frames = LayoutCalculator.calculateLargeTopSmallBottom(for: size, layout: layout)
@@ -275,12 +275,12 @@ struct LayoutPreviewView: View {
                         .fill(Color.blue.opacity(0.3))
                         .frame(width: frames.top.size.width, height: frames.top.size.height)
                         .overlay(Text("Top").font(.caption2))
-                        .position(frames.top.centerX, frames.top.centerY)
+                        .position(x: frames.top.centerX, y: frames.top.centerY)
                     RoundedRectangle(cornerRadius: 4)
                         .fill(Color.green.opacity(0.3))
                         .frame(width: frames.bottom.size.width, height: frames.bottom.size.height)
                         .overlay(Text("Bottom").font(.caption2))
-                        .position(frames.bottom.centerX, frames.bottom.centerY)
+                        .position(x: frames.bottom.centerX, y: frames.bottom.centerY)
 
                 case .mirror:
                     Text("Mirror")
