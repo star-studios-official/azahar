@@ -95,14 +95,14 @@ final class MetalViewUIView: UIView {
     
     private func updateLayout() {
         let scale = UIScreen.main.scale
-        az_emu_surface_set(Unmanaged.passUnretained(metalLayer).toOpaque(), Float(scale))
         
-        // Use content dimensions (minus safe area) for framebuffer layout
+        // Set portrait mode before surface to ensure correct framebuffer layout
         let contentWidth = bounds.width - customSafeAreaInsets.leading - customSafeAreaInsets.trailing
         let contentHeight = bounds.height - customSafeAreaInsets.top - customSafeAreaInsets.bottom
         let portrait = contentHeight > contentWidth
-        
         az_set_portrait_mode(portrait)
+        
+        az_emu_surface_set(Unmanaged.passUnretained(metalLayer).toOpaque(), Float(scale))
         az_update_framebuffer(portrait)
     }
 
@@ -117,14 +117,19 @@ final class MetalViewUIView: UIView {
         AppLogger.info("[MetalView] Starting presentation - setting up Metal surface")
         AppLogger.debug("[MetalView] Bounds: \(bounds), Content: \(contentWidth)x\(contentHeight), Scale: \(UIScreen.main.scale)")
         
+        // Set portrait mode BEFORE surface setup so the framebuffer layout is
+        // computed correctly on the first pass. Otherwise g_is_portrait is false
+        // when OnSurfaceChanged triggers UpdateCurrentFramebufferLayout, causing
+        // the two 3DS screens to render side-by-side instead of stacked.
+        let portrait = contentHeight > contentWidth
+        az_set_portrait_mode(portrait)
+        
         let scale = Float(UIScreen.main.scale)
         az_emu_surface_set(Unmanaged.passUnretained(metalLayer).toOpaque(), scale)
         isSurfaceSet = true
         
         AppLogger.info("[MetalView] Metal surface set successfully!")
 
-        let portrait = contentHeight > contentWidth
-        az_set_portrait_mode(portrait)
         az_update_framebuffer(portrait)
         
         AppLogger.debug("[MetalView] Portrait mode: \(portrait)")

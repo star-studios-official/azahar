@@ -335,6 +335,10 @@ void az_unlink_console(void);
 /// 3=ErrorAborted, 4=ErrorInvalid, 5=ErrorEncrypted
 int az_download_title_from_nus(uint64_t title_id);
 
+/// Ensures system save data (CFG archive, config file) exists on disk.
+/// Must be called before booting the Home Menu so NAND system data is present.
+void az_init_system_save_data(void);
+
 // ---------------------------------------------------------------------------
 // Save states / performance / play time
 // ---------------------------------------------------------------------------

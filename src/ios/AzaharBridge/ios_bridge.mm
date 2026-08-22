@@ -11,6 +11,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstring>
+#include <ctime>
 #include <mutex>
 #include <string>
 
@@ -924,11 +925,39 @@ int az_get_savestate_info(az_savestate_info* out, int max_count) {
 }
 
 void az_save_state(int slot) {
-    Core::System::GetInstance().SendSignal(Core::System::Signal::Save, slot);
+    auto& system = Core::System::GetInstance();
+    if (!system.IsPoweredOn()) return;
+    system.SendSignal(Core::System::Signal::Save, slot);
+    // If paused, RunLoop() is never called so the signal is never consumed.
+    // Temporarily unpause to let the emulation thread process the save.
+    if (pause_emulation.load()) {
+        pause_emulation = false;
+        running_cv.notify_all();
+        // Give the emulation thread time to process the signal (up to 500ms)
+        for (int i = 0; i < 50; i++) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            if (!system.IsPoweredOn() || stop_run.load()) break;
+        }
+        pause_emulation = true;
+    }
 }
 
 void az_load_state(int slot) {
-    Core::System::GetInstance().SendSignal(Core::System::Signal::Load, slot);
+    auto& system = Core::System::GetInstance();
+    if (!system.IsPoweredOn()) return;
+    system.SendSignal(Core::System::Signal::Load, slot);
+    // If paused, RunLoop() is never called so the signal is never consumed.
+    // Temporarily unpause to let the emulation thread process the load.
+    if (pause_emulation.load()) {
+        pause_emulation = false;
+        running_cv.notify_all();
+        // Give the emulation thread time to process the load (up to 1 second)
+        for (int i = 0; i < 100; i++) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            if (!system.IsPoweredOn() || stop_run.load()) break;
+        }
+        pause_emulation = true;
+    }
 }
 
 bool az_save_state_exists(int slot) {
@@ -945,13 +974,90 @@ bool az_save_state_exists(int slot) {
 }
 
 void az_take_screenshot() {
-    // Request screenshot from the renderer
     auto& system = Core::System::GetInstance();
-    if (system.IsPoweredOn()) {
-        auto& renderer = system.GPU().Renderer();
-        // Screenshots are handled via RendererSettings, not signals
-        // The actual screenshot will be taken on next frame render
-        LOG_INFO(Frontend, "[Screenshot] Screenshot requested");
+    if (!system.IsPoweredOn()) return;
+
+    auto& renderer = system.GPU().Renderer();
+    const auto& layout = renderer.GetRenderWindow().GetFramebufferLayout();
+    const auto width = layout.width;
+    const auto height = layout.height;
+
+    const std::string screenshot_dir = FileUtil::GetUserPath(FileUtil::UserPath::ScreenshotsDir);
+    FileUtil::CreateDir(screenshot_dir);
+
+    // Generate filename with timestamp
+    auto now = std::chrono::system_clock::now();
+    auto time_t_now = std::chrono::system_clock::to_time_t(now);
+    struct tm* tm_info = std::localtime(&time_t_now);
+    char time_buf[64];
+    std::strftime(time_buf, sizeof(time_buf), "%Y%m%d_%H%M%S", tm_info);
+    
+    const u64 title_id = system.Kernel().GetCurrentProcess()->codeset->program_id;
+    const std::string filename = fmt::format("{:016X}_{}.png", title_id, time_buf);
+    const std::string filepath = screenshot_dir + "/" + filename;
+
+    auto data = std::make_shared<std::vector<u8>>(width * height * 4);
+    auto saved_path = std::make_shared<std::string>(filepath);
+    
+    renderer.RequestScreenshot(data->data(),
+        [data, saved_path, width, height](bool success) {
+            if (!success || data->empty()) {
+                LOG_ERROR(Frontend, "[Screenshot] Screenshot capture failed");
+                return;
+            }
+            // Write raw RGBA pixels as BMP (simple format, no extra libs needed)
+            const std::string bmp_path = saved_path->substr(0, saved_path->size() - 4) + ".bmp";
+            
+            // BMP file header (14 bytes) + DIB header (40 bytes)
+            const u32 row_size = (width * 3 + 3) & ~3u; // rows padded to 4 bytes
+            const u32 pixel_data_size = row_size * height;
+            const u32 file_size = 54 + pixel_data_size;
+            
+            std::vector<u8> bmp(file_size, 0);
+            
+            // File header
+            bmp[0] = 'B'; bmp[1] = 'M';
+            bmp[2] = file_size; bmp[3] = file_size >> 8; bmp[4] = file_size >> 16; bmp[5] = file_size >> 24;
+            bmp[10] = 54; // offset to pixel data
+            
+            // DIB header
+            bmp[14] = 40; // header size
+            bmp[18] = width; bmp[19] = width >> 8; bmp[20] = width >> 16; bmp[21] = width >> 24;
+            bmp[22] = height; bmp[23] = height >> 8; bmp[24] = height >> 16; bmp[25] = height >> 24;
+            bmp[26] = 1; // planes
+            bmp[28] = 24; // bits per pixel
+            bmp[34] = pixel_data_size; bmp[35] = pixel_data_size >> 8;
+            bmp[36] = pixel_data_size >> 16; bmp[37] = pixel_data_size >> 24;
+            
+            // Convert RGBA to BGR (bottom-up)
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    const u32 src_idx = (y * width + x) * 4;
+                    const u32 dst_idx = 54 + y * row_size + x * 3;
+                    if (src_idx + 3 <= data->size() && dst_idx + 2 < bmp.size()) {
+                        bmp[dst_idx + 0] = (*data)[src_idx + 2]; // B
+                        bmp[dst_idx + 1] = (*data)[src_idx + 1]; // G
+                        bmp[dst_idx + 2] = (*data)[src_idx + 0]; // R
+                    }
+                }
+            }
+            
+            FileUtil::IOFile file(bmp_path, "wb");
+            if (file.WriteBytes(bmp.data(), bmp.size()) == bmp.size()) {
+                LOG_INFO(Frontend, "[Screenshot] Saved to {}", bmp_path);
+            } else {
+                LOG_ERROR(Frontend, "[Screenshot] Failed to write {}", bmp_path);
+            }
+        }, layout);
+
+    LOG_INFO(Frontend, "[Screenshot] Screenshot requested ({}x{})", width, height);
+    
+    // If paused, unpause briefly to let the renderer capture the frame
+    if (pause_emulation.load()) {
+        pause_emulation = false;
+        running_cv.notify_all();
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        pause_emulation = true;
     }
 }
 
@@ -1045,12 +1151,61 @@ void az_netplay_ban_user(const char*) {}
 void az_netplay_unban_user(const char*) {}
 
 // ---------------------------------------------------------------------------
-// Cheats — stubs
+// Cheats
 // ---------------------------------------------------------------------------
 
-int az_cheats_load(const char*, az_cheat_entry*, int) { return 0; }
-bool az_cheats_set_enabled(int64_t, bool) { return false; }
-bool az_cheats_apply(void) { return false; }
+int az_cheats_load(const char* path, az_cheat_entry* out, int max_count) {
+    auto& system = Core::System::GetInstance();
+    if (!system.IsPoweredOn()) return 0;
+
+    auto& cheat_engine = system.CheatEngine();
+
+    // If a path is provided, reload from that file. Otherwise use the title ID.
+    if (path && path[0] != '\0') {
+        const u64 title_id = system.Kernel().GetCurrentProcess()->codeset->program_id;
+        cheat_engine.LoadCheatFile(title_id);
+    }
+
+    const auto cheats = cheat_engine.GetCheats();
+    const int count = std::min(static_cast<int>(cheats.size()), max_count);
+
+    // Store string data in a vector so pointers remain valid after the call.
+    static std::vector<std::string> name_buf;
+    static std::vector<std::string> notes_buf;
+    name_buf.resize(count);
+    notes_buf.resize(count);
+
+    for (int i = 0; i < count; i++) {
+        const auto& cheat = cheats[i];
+        out[i].cheat_id = static_cast<int64_t>(i);
+        name_buf[i] = cheat->GetName();
+        notes_buf[i] = cheat->GetComments();
+        out[i].name = name_buf[i].c_str();
+        out[i].notes = notes_buf[i].c_str();
+        out[i].enabled = cheat->IsEnabled();
+    }
+
+    LOG_INFO(Frontend, "[Cheats] Loaded {} cheats", count);
+    return count;
+}
+
+bool az_cheats_set_enabled(int64_t cheat_id, bool enabled) {
+    auto& system = Core::System::GetInstance();
+    if (!system.IsPoweredOn()) return false;
+
+    auto cheats = system.CheatEngine().GetCheats();
+    if (cheat_id < 0 || cheat_id >= static_cast<int64_t>(cheats.size())) return false;
+
+    cheats[cheat_id]->SetEnabled(enabled);
+    LOG_INFO(Frontend, "[Cheats] Cheat {} {}", cheat_id, enabled ? "enabled" : "disabled");
+    return true;
+}
+
+bool az_cheats_apply(void) {
+    // Cheats are applied automatically by the CheatEngine callback each frame.
+    // This is a no-op but exists for API compatibility.
+    return true;
+}
 
 // ---------------------------------------------------------------------------
 // ROM/CIA compression
@@ -1242,6 +1397,37 @@ int az_get_system_title_ids(int system_type, int region, uint64_t* out_titles, i
     }
     
     return static_cast<int>(titles.size());
+}
+
+/// Ensure system save data (CFG archive, config file, etc.) exists on disk.
+/// Mirrors Android's SystemSaveGame.load() + save() which creates the NAND
+/// SystemSaveData archive 0x00010017 and writes the default config blocks.
+/// Must be called BEFORE booting the Home Menu so account.dat, config,
+/// BOSS_SV.db, CEC/TMP and other system data are present.
+void az_init_system_save_data(void) {
+    LOG_INFO(Frontend, "[System] Initializing system save data...");
+
+    auto& system = Core::System::GetInstance();
+    auto cfg = Service::CFG::GetModule(system);
+
+    if (cfg->IsSystemSetupNeeded()) {
+        LOG_INFO(Frontend, "[System] System setup needed - writing defaults");
+
+        // Set sensible defaults for a fresh install
+        cfg->SetUsername(Common::UTF8ToUTF16("User"));
+        cfg->SetBirthday(1, 1);     // January 1st
+        cfg->SetSystemLanguage(Service::CFG::SystemLanguage::LANGUAGE_EN);
+        cfg->SetSoundOutputMode(Service::CFG::SoundOutputMode::Stereo);
+        cfg->SetCountryCode(0x31);  // US
+
+        cfg->SetSystemSetupNeeded(false);
+    }
+
+    // Always persist to disk - LoadConfigNANDSaveFile creates the archive
+    // and FormatConfig on first run, but we must write after setting defaults.
+    cfg->UpdateConfigNANDSavegame();
+
+    LOG_INFO(Frontend, "[System] System save data initialized");
 }
 
 // ---------------------------------------------------------------------------

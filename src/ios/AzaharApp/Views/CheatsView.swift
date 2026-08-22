@@ -61,7 +61,28 @@ struct CheatsView: View {
 
     private func loadCheats() {
         let titleId = az_get_running_title_id()
-        guard titleId != 0 else { return }
-        // TODO: load cheats via az_cheats_load
+        guard titleId != 0 else {
+            AppLogger.warning("Cheats", message: "No game running (titleId == 0)")
+            return
+        }
+        
+        var cEntries = [az_cheat_entry](repeating: az_cheat_entry(), count: 256)
+        let count = az_cheats_load(nil, &cEntries, Int32(cEntries.count))
+        
+        guard count > 0 else {
+            AppLogger.info("Cheats: No cheats found for title \(String(format: "%016X", titleId))")
+            return
+        }
+        
+        cheats = (0..<Int(count)).map { i in
+            let e = cEntries[i]
+            return CheatEntry(
+                id: e.cheat_id,
+                name: e.name.map { String(cString: $0) } ?? "Unknown",
+                notes: e.notes.map { String(cString: $0) } ?? "",
+                enabled: e.enabled
+            )
+        }
+        AppLogger.info("Cheats: Loaded \(cheats.count) cheats")
     }
 }

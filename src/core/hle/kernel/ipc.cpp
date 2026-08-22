@@ -196,7 +196,14 @@ Result TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySystem
                                context.target_address == source_address;
                     });
 
-                ASSERT(found != mapped_buffer_context.end());
+                if (found == mapped_buffer_context.end()) {
+                    LOG_ERROR(Kernel,
+                              "MappedBuffer reply context not found for size={}, perms={}, "
+                              "source_address={:08X} - skipping unmapping",
+                              size, static_cast<u32>(permissions), source_address);
+                    cmd_buf[i++] = 0;
+                    break;
+                }
 
                 if (permissions != IPC::MappedBufferPermissions::R) {
                     // Copy the modified buffer back into the target process

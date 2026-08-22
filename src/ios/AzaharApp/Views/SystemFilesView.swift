@@ -214,6 +214,8 @@ struct SystemFilesView: View {
         .navigationTitle("System Files")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
+            // Initialize system save data (mirrors Android SystemSaveGame.load())
+            az_init_system_save_data()
             checkSystemStatus()
         }
         .alert("System Files", isPresented: $showingAlert) {
@@ -396,6 +398,10 @@ struct SystemFilesView: View {
             showingAlert = true
             return
         }
+        
+        // Initialize system save data (CFG archive, config file, etc.)
+        // before booting - mirrors Android's SystemSaveGame.load()
+        az_init_system_save_data()
         
         let game = Game(
             path: path,

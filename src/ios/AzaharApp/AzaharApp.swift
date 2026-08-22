@@ -172,21 +172,30 @@ final class AppState: ObservableObject {
         AppLogger.info("Game title: \(game.title)")
         AppLogger.info("Media type: \(game.mediaType)")
         
-        // If we're already emulating, stop the previous session first so the
-        // next launch starts from a clean state.
-        if isEmulating {
-            AppLogger.info("Already emulating - stopping previous session")
-            az_stop_emulation()
-            isEmulating = false
-            currentGame = nil
-        }
-        
         // Verify the file exists before presenting the emulator.
         if !FileManager.default.fileExists(atPath: game.path) {
             AppLogger.error("ROM Loading", message: "Cannot launch \(game.title): file does not exist at \(game.path)")
             return
         }
         
+        // If we're already emulating, stop the previous session first so the
+        // next launch starts from a clean state. We dispatch the new launch
+        // to the next run-loop tick so SwiftUI has time to dismiss the old
+        // fullScreenCover before presenting the new one.
+        if isEmulating {
+            AppLogger.info("Already emulating - stopping previous session")
+            az_stop_emulation()
+            isEmulating = false
+            currentGame = nil
+            DispatchQueue.main.async {
+                self.beginLaunch(game)
+            }
+        } else {
+            beginLaunch(game)
+        }
+    }
+    
+    private func beginLaunch(_ game: Game) {
         AppLogger.stateChange("AppState", from: "idle", to: "launching")
         
         currentGame = game
@@ -206,26 +215,57 @@ final class AppState: ObservableObject {
             return false
         }
         
+        // Initialize system save data (CFG archive, config, etc.)
+        // Mirrors Android's SystemSaveGame.load()
+        az_init_system_save_data()
+        
+        // Find the first region that has a Home Menu installed
+        var homeMenuPath = ""
+        var homeMenuRegion = 1 // Default to USA
+        for region in 0..<7 {
+            let path = String(cString: az_get_home_menu_path(Int32(region)))
+            if !path.isEmpty {
+                homeMenuPath = path
+                homeMenuRegion = region
+                break
+            }
+        }
+        
+        guard !homeMenuPath.isEmpty else {
+            AppLogger.error("Home Menu", message: "Home Menu path not found for any region")
+            return false
+        }
+        
         // If we're already emulating, stop the previous session first.
         if isEmulating {
             AppLogger.info("Already emulating - stopping previous session")
             az_stop_emulation()
             isEmulating = false
             currentGame = nil
+            DispatchQueue.main.async {
+                self.beginHomeMenuLaunch(homeMenuPath, homeMenuRegion)
+            }
+        } else {
+            beginHomeMenuLaunch(homeMenuPath, homeMenuRegion)
         }
         
-        // Create a special "game" entry for Home Menu
+        return true
+    }
+    
+    private func beginHomeMenuLaunch(_ path: String, _ region: Int) {
+        let regionNames = ["Japan", "USA", "Europe", "Australia", "China", "Korea", "Taiwan"]
+        let regionName = region < regionNames.count ? regionNames[region] : "Unknown"
+        
         currentGame = Game(
-            path: "", // Empty path signals Home Menu boot
-            title: "Home Menu",
-            titleId: 0x0004003000008F02, // Home Menu title ID
+            path: path,
+            title: "Home Menu (\(regionName))",
+            titleId: 0x0004003000008F02,
             mediaType: Int32(AZ_MEDIA_TYPE_NAND)
         )
         isEmulating = true
         
-        AppLogger.info("Home Menu currentGame created")
+        AppLogger.info("Home Menu currentGame created: \(path)")
         AppLogger.info("AppState.isEmulating = true")
-        return true
     }
 
     func stopEmulation() {
