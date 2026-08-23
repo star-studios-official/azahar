@@ -2115,6 +2115,12 @@ static void* g_multipeer_manager = nullptr;
 static std::queue<std::vector<u8>> g_nwm_received_packets;
 static std::mutex g_nwm_packet_mutex;
 
+// The real invitation logic (looking up the MCPeerID and calling connectToPeer:) is defined
+// further down in this file with C++ linkage; declared here so the C bridge can forward to it.
+namespace Service::NWM {
+void az_nwm_connect_to_peer_by_name(const char* peer_name);
+}
+
 // MultipeerConnectivity bridge functions (C linkage for cross-language calls)
 extern "C" {
 
@@ -2218,12 +2224,11 @@ void az_nwm_start_browsing() {
 
 // Connect to a specific peer
 void az_nwm_connect_to_peer(const char* peer_name) {
-    if (g_multipeer_manager) {
-        @autoreleasepool {
-            // Implementation would require passing MCPeerID
-            LOG_INFO(Frontend, "[NWM] Connecting to peer: {}", peer_name);
-        }
+    if (!peer_name || !g_multipeer_manager) {
+        LOG_WARNING(Frontend, "[NWM] Cannot connect - invalid peer name or manager not initialized");
+        return;
     }
+    Service::NWM::az_nwm_connect_to_peer_by_name(peer_name);
 }
 
 // Send packet to all connected peers

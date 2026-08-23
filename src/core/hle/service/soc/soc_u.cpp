@@ -868,7 +868,7 @@ void SOC_U::Socket(Kernel::HLERequestContext& ctx) {
         ret = socketHandle;
     }
 
-    LOG_DEBUG(Service_SOC, "called, pid={}, ret={}", pid, static_cast<s32>(ret));
+    LOG_INFO(Service_SOC, "Socket: called, pid={}, ret={}", pid, static_cast<s32>(ret));
 
     rb.Push(ResultSuccess);
     rb.Push(static_cast<s32>(ret));
@@ -1032,8 +1032,8 @@ void SOC_U::Accept(Kernel::HLERequestContext& ctx) {
                 ctr_addr_buf.resize(async_data->max_addr_len);
             }
 
-            LOG_DEBUG(Service_SOC, "called, pid={}, fd={}, ret={}", async_data->pid,
-                      async_data->socket_handle, static_cast<s32>(async_data->ret));
+            LOG_INFO(Service_SOC, "Accept: called, pid={}, fd={}, ret={}", async_data->pid,
+                     async_data->socket_handle, static_cast<s32>(async_data->ret));
 
             IPC::RequestBuilder rb(ctx, 0x04, 2, 2);
             rb.Push(ResultSuccess);
@@ -1831,8 +1831,8 @@ void SOC_U::Connect(Kernel::HLERequestContext& ctx) {
                 async_data->ret = TranslateError(async_data->connect_error);
             }
 
-            LOG_DEBUG(Service_SOC, "called, pid={}, fd={}, ret={}", async_data->pid,
-                      async_data->socket_handle, static_cast<s32>(async_data->ret));
+            LOG_INFO(Service_SOC, "Connect: called, pid={}, fd={}, ret={}", async_data->pid,
+                     async_data->socket_handle, static_cast<s32>(async_data->ret));
 
             IPC::RequestBuilder rb(ctx, 0x06, 2, 0);
             rb.Push(ResultSuccess);
@@ -1853,7 +1853,7 @@ void SOC_U::InitializeSockets(Kernel::HLERequestContext& ctx) {
         res = ResultAlreadyInitialized;
     }
 
-    LOG_DEBUG(Service_SOC, "called, pid={}, res={:#08X}", pid, res.raw);
+    LOG_INFO(Service_SOC, "InitializeSockets: called, pid={}, res={:#08X}", pid, res.raw);
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(res);
@@ -2091,6 +2091,9 @@ void SOC_U::GetAddrInfoImpl(Kernel::HLERequestContext& ctx) {
         if (out != nullptr)
             freeaddrinfo(out);
     }
+
+    LOG_INFO(Service_SOC, "GetAddrInfo: node={} service={} ret={} count={}", node_data ? node_data : "",
+             service_data ? service_data : "", static_cast<s32>(ret), count);
 
     IPC::RequestBuilder rb = rp.MakeBuilder(3, 2);
     rb.Push(ResultSuccess);

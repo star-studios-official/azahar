@@ -166,6 +166,13 @@ Result TranslateCommandBuffer(Kernel::KernelSystem& kernel, Memory::MemorySystem
             cmd_buf[i++] = target_buffer.address;
             break;
         }
+        case IPC::DescriptorType::PXIBuffer: {
+            // PXI buffer descriptors carry a physical address of the buffer on real hardware
+            // (they are used when talking to ARM9-side services like FSPXI). This emulator's HLE
+            // services operate on virtual addresses, so pass the address through unchanged.
+            i += 1;
+            break;
+        }
         case IPC::DescriptorType::MappedBuffer: {
             IPC::MappedBufferDescInfo descInfo{descriptor};
             VAddr source_address = cmd_buf[i];

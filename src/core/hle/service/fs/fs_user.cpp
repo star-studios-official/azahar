@@ -28,6 +28,7 @@
 #include "core/hle/result.h"
 #include "core/hle/service/am/am.h"
 #include "core/hle/service/fs/archive.h"
+#include "core/hle/service/fs/fs_pxi.h"
 #include "core/hle/service/fs/fs_user.h"
 #include "core/hw/aes/key.h"
 #include "core/hw/unique_data.h"
@@ -1930,5 +1931,6 @@ void Service::FS::FS_USER::serialize(Archive& ar, const unsigned int) {
 void InstallInterfaces(Core::System& system) {
     auto& service_manager = system.ServiceManager();
     std::make_shared<FS_USER>(system)->InstallAsService(service_manager);
+    std::make_shared<FS_PXI>(system)->InstallAsService(service_manager);
 }
 } // namespace Service::FS

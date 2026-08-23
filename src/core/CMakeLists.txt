@@ -312,6 +312,8 @@ add_library(citra_core STATIC EXCLUDE_FROM_ALL
     hle/service/fs/directory.h
     hle/service/fs/file.cpp
     hle/service/fs/file.h
+    hle/service/fs/fs_pxi.cpp
+    hle/service/fs/fs_pxi.h
     hle/service/fs/fs_user.cpp
     hle/service/fs/fs_user.h
     hle/service/gsp/gsp.cpp

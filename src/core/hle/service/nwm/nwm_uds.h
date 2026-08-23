@@ -726,9 +726,18 @@ private:
 #ifdef CITRA_IOS
     // iOS MultipeerConnectivity backend for local wireless play
     std::unique_ptr<NWMMultipeerBackend> multipeer_backend;
-    
+
     // Mapping of fake MAC addresses to peer names for connection lookup
     std::unordered_map<MacAddress, std::string, MacAddressHash> peer_mac_to_name;
+
+    // Periodic poll for packets received over the MultipeerConnectivity session.
+    Core::TimingEventType* multipeer_poll_event = nullptr;
+
+    /// Drains packets received over MultipeerConnectivity into the pending packet queue.
+    void PollMultipeerPackets();
+
+    // The free SendPacket helper forwards frames over the Multipeer session.
+    friend void SendPacket(Network::WifiPacket& packet);
 #endif
 
     template <class Archive>

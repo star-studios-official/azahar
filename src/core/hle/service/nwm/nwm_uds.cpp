@@ -93,6 +93,43 @@ std::list<Network::WifiPacket> NWM_UDS::GetReceivedBeacons(const MacAddress& sen
     return std::move(received_beacons);
 }
 
+#ifdef CITRA_IOS
+/// Serializes a WifiPacket into a flat byte stream for transport over the MultipeerConnectivity
+/// session. Both ends run this emulator, so a fixed little-endian layout is sufficient:
+///   u8 type, u8 channel, 6B transmitter MAC, 6B destination MAC, u32 data size, data.
+static std::vector<u8> SerializeWifiPacket(const Network::WifiPacket& packet) {
+    std::vector<u8> out;
+    out.reserve(1 + 1 + 12 + 4 + packet.data.size());
+    out.push_back(static_cast<u8>(packet.type));
+    out.push_back(packet.channel);
+    out.insert(out.end(), packet.transmitter_address.begin(), packet.transmitter_address.end());
+    out.insert(out.end(), packet.destination_address.begin(), packet.destination_address.end());
+    const u32 size = static_cast<u32>(packet.data.size());
+    out.resize(out.size() + sizeof(size));
+    std::memcpy(out.data() + out.size() - sizeof(size), &size, sizeof(size));
+    out.insert(out.end(), packet.data.begin(), packet.data.end());
+    return out;
+}
+
+static bool DeserializeWifiPacket(const std::vector<u8>& in, Network::WifiPacket& out) {
+    constexpr std::size_t HeaderSize = 1 + 1 + 6 + 6 + sizeof(u32);
+    if (in.size() < HeaderSize) {
+        return false;
+    }
+    out.type = static_cast<Network::WifiPacket::PacketType>(in[0]);
+    out.channel = in[1];
+    std::memcpy(out.transmitter_address.data(), in.data() + 2, 6);
+    std::memcpy(out.destination_address.data(), in.data() + 8, 6);
+    u32 size = 0;
+    std::memcpy(&size, in.data() + 14, sizeof(size));
+    if (in.size() < HeaderSize + size) {
+        return false;
+    }
+    out.data.assign(in.begin() + HeaderSize, in.begin() + HeaderSize + size);
+    return true;
+}
+#endif // CITRA_IOS
+
 /// Sends a WifiPacket to the room we're currently connected to.
 void SendPacket(Network::WifiPacket& packet) {
     if (auto room_member = Network::GetRoomMember().lock()) {
@@ -103,6 +140,14 @@ void SendPacket(Network::WifiPacket& packet) {
             room_member->SendWifiPacket(packet);
         }
     }
+#ifdef CITRA_IOS
+    // When two iOS devices play locally without a network room, also deliver the frame over the
+    // MultipeerConnectivity session so the peer's NWM::UDS service receives it.
+    if (g_nwm_uds_instance != nullptr && g_nwm_uds_instance->multipeer_backend != nullptr &&
+        g_nwm_uds_instance->multipeer_backend->IsConnected()) {
+        g_nwm_uds_instance->multipeer_backend->SendPacket(SerializeWifiPacket(packet));
+    }
+#endif // CITRA_IOS
 }
 
 u16 NWM_UDS::GetNextAvailableNodeId() {
@@ -1925,6 +1970,13 @@ NWM_UDS::NWM_UDS(Core::System& system) : ServiceFramework("nwm::UDS"), system(sy
         multipeer_backend = std::make_unique<NWMMultipeerBackend>();
         multipeer_backend->Initialize();
         LOG_INFO(Service_NWM, "[LocalMP] iOS MultipeerConnectivity backend initialized");
+
+        multipeer_poll_event = system.CoreTiming().RegisterEvent(
+            "UDS::MultipeerPacketPoll",
+            [this]([[maybe_unused]] std::uintptr_t user_data, s64 cycles_late) {
+                PollMultipeerPackets();
+            });
+        system.CoreTiming().ScheduleEvent(msToCycles(10), multipeer_poll_event, 0);
     } else {
         LOG_INFO(Service_NWM, "[LocalMP] iOS MultipeerConnectivity disabled by user setting");
     }
@@ -1955,6 +2007,12 @@ NWM_UDS::~NWM_UDS() {
         room_member->Unbind(wifi_packet_received);
 
     system.CoreTiming().UnscheduleEvent(beacon_broadcast_event, 0);
+#ifdef CITRA_IOS
+    if (multipeer_poll_event != nullptr) {
+        system.CoreTiming().UnscheduleEvent(multipeer_poll_event, 0);
+        multipeer_poll_event = nullptr;
+    }
+#endif
 }
 
 #ifdef CITRA_IOS
@@ -2074,6 +2132,30 @@ void NWM_UDS::RemovePeerBeacon(const std::string& peer_name) {
         received_beacons.end());
     
     LOG_INFO(Service_NWM, "[LocalMP] Beacon removed successfully");
+}
+
+void NWM_UDS::PollMultipeerPackets() {
+    if (multipeer_backend == nullptr || multipeer_poll_event == nullptr) {
+        return;
+    }
+
+    // Drain every packet the MultipeerConnectivity session received since the last poll and feed
+    // them into the same queue used for network-room packets so the core timing event handles them
+    // uniformly (beacons, EAPoL, data frames, ...).
+    while (multipeer_backend->HasReceivedPackets()) {
+        const std::vector<u8> raw = multipeer_backend->PullPacket();
+        if (raw.empty()) {
+            break;
+        }
+        Network::WifiPacket packet{};
+        if (DeserializeWifiPacket(raw, packet)) {
+            pending_packets.Push(packet);
+            system.CoreTiming().ScheduleEvent(0, handle_wifi_packet_event, 0, 1, true);
+        }
+    }
+
+    // Packets arrive asynchronously from the Multipeer session; poll again shortly.
+    system.CoreTiming().ScheduleEvent(msToCycles(10), multipeer_poll_event, 0);
 }
 
 std::string NWM_UDS::GetPeerNameFromMac(const MacAddress& mac) {

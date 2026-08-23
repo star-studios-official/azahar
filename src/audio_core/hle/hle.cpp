@@ -518,6 +518,15 @@ void DspHle::LoadComponent(std::span<const u8> component_data) {
             Service_DSP, "Structures hash: {:#018x}",
             Common::ComputeHash64<Common::HashAlgo64::CityHash>(component_data.data() + 0x340, 60));
     }
+
+    // On real hardware the DSP starts running the loaded firmware component immediately and is
+    // ready to accept audio data. Applications (notably the Home Menu) wait for the audio-pipe
+    // interrupt before they send the Initialize command / start writing audio data, so bring the
+    // HLE DSP to the "On" state here and publish the DSP memory layout like Initialize does.
+    // Without this the DSP stays Off and the application's audio thread never gets unblocked.
+    impl->Initialize();
+    impl->AudioPipeWriteStructAddresses();
+    impl->dsp_state = DspState::On;
 }
 
 void DspHle::UnloadComponent() {

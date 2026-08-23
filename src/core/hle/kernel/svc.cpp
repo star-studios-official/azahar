@@ -42,6 +42,7 @@
 #include "core/hle/kernel/vm_manager.h"
 #include "core/hle/kernel/wait_object.h"
 #include "core/hle/result.h"
+#include "core/hle/service/sm/sm.h"
 #include "core/hle/service/plgldr/plgldr.h"
 
 namespace Kernel {
@@ -495,6 +496,7 @@ private:
     Result InvalidateInstructionCacheRange(u32 addr, u32 size);
     Result InvalidateEntireInstructionCache();
     u32 ConvertVaToPa(u32 addr);
+    Result ControlService();
     Result MapProcessMemoryEx(Handle dst_process_handle, u32 dst_address, Handle src_process_handle,
                               u32 src_address, u32 size, MapMemoryExFlag flags,
                               Handle dst_process_handle_backup);
@@ -2095,6 +2097,61 @@ u32 SVC::ConvertVaToPa(u32 addr) {
            Memory::FCRAM_PADDR;
 }
 
+/// Luma3DS custom SVC (0xB0), used by CFW-style homebrew (e.g. PKSM). Performs actions related to
+/// services or global handles, bypassing the service manager's access control.
+///   r0 = op:
+///     SERVICEOP_STEAL_CLIENT_SESSION (0): r1 = Handle* out_handle, r2 = char* service_name (max
+///                                        8 chars, NUL-terminated)
+///     SERVICEOP_GET_NAME (1):             r1 = char* out_name (8 bytes), r2 = Handle
+///                                        client_or_session_handle
+Result SVC::ControlService() {
+    const u32 op = GetReg(0);
+
+    switch (op) {
+    case 0: { // SERVICEOP_STEAL_CLIENT_SESSION
+        const VAddr out_handle_addr = GetReg(1);
+        const VAddr name_addr = GetReg(2);
+
+        R_UNLESS(memory.IsValidVirtualAddress(*kernel.GetCurrentProcess(), name_addr),
+                 ResultNotFound);
+        static constexpr std::size_t ServiceNameMaxLength = 8;
+        std::string service_name = memory.ReadCString(name_addr, ServiceNameMaxLength + 1);
+        R_UNLESS(service_name.size() <= ServiceNameMaxLength, ResultNotFound);
+
+        std::shared_ptr<Kernel::ClientSession> client_session;
+        // PxiFS0 is HLE'd as a real service (see Service::FS::FS_PXI); CFW homebrew such as PKSM
+        // steals a session to it and issues FSPXI commands directly.
+        R_TRY(system.ServiceManager().ConnectToService(std::addressof(client_session),
+                                                       service_name));
+
+        Handle handle;
+        R_TRY(kernel.GetCurrentProcess()->handle_table.Create(&handle, client_session));
+
+        memory.Write32(out_handle_addr, handle);
+        LOG_INFO(Kernel_SVC, "ControlService: stole client session for service={} handle=0x{:08X}",
+                 service_name, handle);
+        return ResultSuccess;
+    }
+    case 1: { // SERVICEOP_GET_NAME
+        const VAddr out_name_addr = GetReg(1);
+        const Handle session_handle = GetReg(2);
+
+        auto client_session =
+            kernel.GetCurrentProcess()->handle_table.Get<Kernel::ClientSession>(session_handle);
+        R_UNLESS(client_session, Kernel::ResultInvalidHandle);
+
+        std::array<char, 8> name{};
+        std::memcpy(name.data(), client_session->name.data(),
+                    std::min<std::size_t>(client_session->name.size(), name.size()));
+        memory.WriteBlock(out_name_addr, name.data(), name.size());
+        return ResultSuccess;
+    }
+    default:
+        LOG_ERROR(Kernel_SVC, "ControlService: unknown operation {}", op);
+        return ResultInvalidCombination;
+    }
+}
+
 Result SVC::MapProcessMemoryEx(Handle dst_process_handle, u32 dst_address,
                                Handle src_process_handle, u32 src_address, u32 size,
                                MapMemoryExFlag flags, Handle dst_process_handle_backup) {
@@ -2427,7 +2484,7 @@ const std::array<SVC::FunctionDef, 180> SVC::SVC_Table{{
     {0xAD, nullptr, "Unused", 1000},
     {0xAE, nullptr, "Unused", 1000},
     {0xAF, nullptr, "Unused", 1000},
-    {0xB0, nullptr, "ControlService", 1000},
+    {0xB0, &SVC::Wrap<&SVC::ControlService, 0xB0>, "ControlService", 1000},
     {0xB1, nullptr, "CopyHandle", 1000},
     {0xB2, nullptr, "TranslateHandle", 1000},
     {0xB3, &SVC::Wrap<&SVC::ControlProcess, 0xB3>, "ControlProcess", 1000},
