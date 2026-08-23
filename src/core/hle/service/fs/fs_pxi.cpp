@@ -14,6 +14,7 @@
 #include "core/core.h"
 #include "core/file_sys/directory_backend.h"
 #include "core/file_sys/errors.h"
+#include "core/file_sys/file_backend.h"
 #include "core/hle/ipc_helpers.h"
 #include "core/hle/kernel/process.h"
 #include "core/hle/kernel/thread.h"
