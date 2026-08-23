@@ -4,6 +4,7 @@
 
 #import <AVFoundation/AVFoundation.h>
 
+#include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <thread>
@@ -26,11 +27,13 @@ struct FrameBuffer {
     bool mirror = false;
     bool invert = false;
     bool has_frame = false;
+    Service::CAM::OutputFormat format = Service::CAM::OutputFormat::YUV422;
 };
 
-/// Converts a BGRA32 pixel buffer into an RGB565 frame at the requested size,
-/// honoring mirror/invert. Runs on the capture queue.
-void ConvertBGRAtoRGB565(CVPixelBufferRef pixel_buffer, FrameBuffer& buffer) {
+/// Converts a BGRA32 pixel buffer into a frame in the format requested by the
+/// application (YUV422 packed YUYV, or RGB565) at the requested size, honoring
+/// mirror/invert. Runs on the capture queue.
+void ConvertBGRAtoFrame(CVPixelBufferRef pixel_buffer, FrameBuffer& buffer) {
     CVPixelBufferLockBaseAddress(pixel_buffer, kCVPixelBufferLock_ReadOnly);
     const u8* src_base = static_cast<const u8*>(CVPixelBufferGetBaseAddress(pixel_buffer));
     const size_t src_row_bytes = CVPixelBufferGetBytesPerRow(pixel_buffer);
@@ -43,18 +46,21 @@ void ConvertBGRAtoRGB565(CVPixelBufferRef pixel_buffer, FrameBuffer& buffer) {
 
     u32 out_width, out_height;
     bool mirror, invert;
+    Service::CAM::OutputFormat format;
     {
         std::lock_guard<std::mutex> lock(buffer.mutex);
         out_width = buffer.width;
         out_height = buffer.height;
         mirror = buffer.mirror;
         invert = buffer.invert;
+        format = buffer.format;
     }
     if (out_width == 0 || out_height == 0) {
         out_width = static_cast<u32>(src_width);
         out_height = static_cast<u32>(src_height);
     }
 
+    const bool is_yuv = format == Service::CAM::OutputFormat::YUV422;
     std::vector<u16> converted(static_cast<std::size_t>(out_width) * out_height);
     for (u32 y = 0; y < out_height; ++y) {
         size_t sy = (y * src_height) / out_height;
@@ -62,14 +68,44 @@ void ConvertBGRAtoRGB565(CVPixelBufferRef pixel_buffer, FrameBuffer& buffer) {
             sy = src_height - 1 - sy;
         }
         const u8* row = src_base + sy * src_row_bytes;
-        for (u32 x = 0; x < out_width; ++x) {
-            size_t sx = (x * src_width) / out_width;
-            if (mirror) {
-                sx = src_width - 1 - sx;
+        if (is_yuv) {
+            // Packed YUYV422: pairs of pixels share one U/V (taken from the even pixel).
+            // Each u16 stores one Y in the low byte and the shared chroma in the high byte.
+            for (u32 x = 0; x < out_width; x += 2) {
+                size_t sx0 = (x * src_width) / out_width;
+                if (mirror) {
+                    sx0 = src_width - 1 - sx0;
+                }
+                const u8* p0 = row + sx0 * 4;
+                const int r0 = p0[2], g0 = p0[1], b0 = p0[0];
+                const u32 y0 = (77 * r0 + 150 * g0 + 29 * b0 + 128) >> 8;
+                const u32 u = std::clamp(((-43 * r0 - 85 * g0 + 128 * b0 + 128) >> 8) + 128, 0, 255);
+                const u32 v = std::clamp(((128 * r0 - 107 * g0 - 21 * b0 + 128) >> 8) + 128, 0, 255);
+                converted[static_cast<std::size_t>(y) * out_width + x] =
+                    static_cast<u16>(y0 | (u << 8));
+                if (x + 1 < out_width) {
+                    size_t sx1 = ((x + 1) * src_width) / out_width;
+                    if (mirror) {
+                        sx1 = src_width - 1 - sx1;
+                    }
+                    const u8* p1 = row + sx1 * 4;
+                    const u32 y1 =
+                        (77 * p1[2] + 150 * p1[1] + 29 * p1[0] + 128) >> 8;
+                    converted[static_cast<std::size_t>(y) * out_width + x + 1] =
+                        static_cast<u16>(y1 | (v << 8));
+                }
             }
-            const u8* p = row + sx * 4;
-            const u16 rgb565 = static_cast<u16>(((p[2] >> 3) << 11) | ((p[1] >> 2) << 5) | (p[0] >> 3));
-            converted[static_cast<std::size_t>(y) * out_width + x] = rgb565;
+        } else {
+            for (u32 x = 0; x < out_width; ++x) {
+                size_t sx = (x * src_width) / out_width;
+                if (mirror) {
+                    sx = src_width - 1 - sx;
+                }
+                const u8* p = row + sx * 4;
+                const u16 rgb565 =
+                    static_cast<u16>(((p[2] >> 3) << 11) | ((p[1] >> 2) << 5) | (p[0] >> 3));
+                converted[static_cast<std::size_t>(y) * out_width + x] = rgb565;
+            }
         }
     }
     CVPixelBufferUnlockBaseAddress(pixel_buffer, kCVPixelBufferLock_ReadOnly);
@@ -99,7 +135,7 @@ void ConvertBGRAtoRGB565(CVPixelBufferRef pixel_buffer, FrameBuffer& buffer) {
     if (!pixel_buffer || !self.frameBuffer) {
         return;
     }
-    Camera::IOS::ConvertBGRAtoRGB565(pixel_buffer, *self.frameBuffer);
+    Camera::IOS::ConvertBGRAtoFrame(pixel_buffer, *self.frameBuffer);
 }
 @end
 
@@ -259,6 +295,8 @@ void Interface::SetFlip(Service::CAM::Flip flip) {
 
 void Interface::SetFormat(Service::CAM::OutputFormat format_) {
     format = format_;
+    std::lock_guard<std::mutex> lock(buffer->mutex);
+    buffer->format = format_;
 }
 
 std::vector<u16> Interface::ReceiveFrame() {

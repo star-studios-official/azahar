@@ -103,8 +103,10 @@ public:
     /// Enable/Disable audio stretching.
     void EnableStretching(bool enable);
 
-protected:
+    /// Pushes a stereo frame of samples to the audio sink (used by the DSP HLE and CSND).
     void OutputFrame(StereoFrame16 frame);
+
+protected:
     void OutputSample(std::array<s16, 2> sample);
 
 private:

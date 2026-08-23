@@ -34,6 +34,22 @@ The emulator's `src/video_core/pica/` and `src/video_core/shader/` were reverse-
 
 **Improvement**: the emulator's decoder is already functionally correct, but the SDK is the reference for the **ADPCM context/state transition** (predictor+scale state, first-sample handling, block nibble order `NN_SND_ADPCM_DOL_*` constants). Porting the exact block arithmetic removes the risk of off-by-one drift on the first frame of each wave buffer — a classic audio crackle/pitch bug source. BCWAV constants also let the emulator's `BCWAV`/`BCSTM` parsing (`src/audio_core` and file_sys containers) be validated byte-for-byte.
 
+### Implemented: CSND playback (Home Menu BGM + system sounds)
+
+The Home Menu plays its BGM and UI sounds through the **CSND** hardware (`csnd:SND` service), not the DSP — which is why games and DSP-based apps had audio while the Home Menu was silent. `src/core/hle/service/csnd/csnd_snd.cpp` now actually plays audio:
+
+- A core-timing tick (matching the DSP HLE's frame rate) mixes active channels into stereo frames and pushes them through `DspInterface::OutputFrame` (now public).
+- Channel semantics taken from `ref/ctr/sources/libraries/csnd/CTR/csnd_Channel.cpp` + 3dbrew `CSND Shared Memory`/`CSND Registers`:
+  - The stored "sample rate" is the hardware **timer** value: `timer = 67027964 / rate` (`NN_CSND_SYSTEM_CLOCK`, `CalculateTimer`); the mixer resamples each channel to the 32728 Hz output.
+  - Loop modes: Manual (block 1 endlessly), Normal / ConstantSize (block 1 once, then repeat block 2), OneShot (block 1 once, stop).
+  - Encodings: PCM8, PCM16, IMA-ADPCM (standard 89-entry step table, CWAV-style nibbles), PSG square wave (32-sample cycle, 3-bit duty), and LFSR noise.
+  - Start/Pause/ConfigureChannel now drive playback; `UpdateState` reports the real `active` flag (and the old predictor/step_index copy bug is fixed).
+- Volume scale `0x8000 = 100%` (`NN_CSND_VOLUME_MAXIMUM`), blocks read via `Memory::GetPhysicalPointer` (CSND uses physical addresses), 16 MiB decode cap for safety.
+
+### Implemented: camera format fix (green/purple preview)
+
+The iOS camera frontend always delivered RGB565, but 3DS camera apps request **YUV422** (the default `OutputFormat`, converted to RGB via Y2R) — so the RGB565 bytes were read as YUYV, producing the green/purple scramble. `src/ios/AzaharBridge/camera_ios.mm` now honors `SetFormat`: BGRA→YUYV422 (full-range BT.601) when YUV422 is requested, BGRA→RGB565 otherwise. The emulator's Y2R engine (`src/core/hw/y2r.cpp`) was already bit-exact, so no changes were needed there.
+
 ## 3. Video — Y2R (color conversion) reference
 
 - `sources/libraries/y2r/CTR/y2r_Y2r.cpp`, `y2r_Api.cpp`, `include/nn/y2r/CTR/y2r_Types.h` — the official YUV→RGB conversion with per-channel coefficients and input format (YUV422/420, indiv8/16).

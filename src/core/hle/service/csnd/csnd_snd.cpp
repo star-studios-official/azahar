@@ -2,9 +2,16 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+
+#include "audio_core/audio_types.h"
 #include "common/alignment.h"
 #include "common/archives.h"
+#include "common/settings.h"
 #include "core/core.h"
+#include "core/core_timing.h"
 #include "core/hle/ipc_helpers.h"
 #include "core/hle/kernel/resource_limit.h"
 #include "core/hle/result.h"
@@ -14,6 +21,40 @@ SERVICE_CONSTRUCT_IMPL(Service::CSND::CSND_SND)
 SERIALIZE_EXPORT_IMPL(Service::CSND::CSND_SND)
 
 namespace Service::CSND {
+
+namespace {
+
+/// The CSND sample-rate timer is derived from this clock (see nn::csnd::CalculateTimer).
+constexpr double CsndSystemClock = 67027964.0;
+/// The output rate of the CSND hardware (matches the emulator's audio frame rate).
+constexpr double CsndOutputRate = 32728.0;
+/// Maximum number of bytes decoded for a single block, to guard against absurd sizes.
+constexpr u32 MaxDecodedBytes = 1 << 24;
+
+/// Standard IMA-ADPCM tables, used by the CSND hardware for CWAV playback.
+constexpr std::array<int, 16> ima_index_table{
+    -1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8,
+};
+constexpr std::array<int, 89> ima_step_table{
+    7,    8,    9,    10,   11,   12,   13,   14,   16,   17,   19,   21,   23,   25,   28,   31,
+    34,   37,   41,   45,   50,   55,   60,   66,   73,   80,   88,   97,   107,  118,  130,  143,
+    157,  173,  190,  209,  230,  253,  279,  307,  337,  370,  408,  449,  494,  544,  598,  658,
+    724,  796,  876,  963,  1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024,
+    3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484, 7132, 7845, 8630, 9493, 10442, 11487, 12635,
+    13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767,
+};
+
+/// Resampling step (in source samples per output sample) for a CSND channel.
+double GetChannelStep(const Channel& channel) {
+    if (channel.sample_rate == 0) {
+        return 1.0;
+    }
+    // The stored "sample rate" is actually the hardware timer value: timer = 67027964 / rate.
+    const double source_rate = CsndSystemClock / channel.sample_rate;
+    return source_rate / CsndOutputRate;
+}
+
+} // namespace
 
 enum class CommandId : u16 {
     Start = 0x000,
@@ -222,6 +263,10 @@ void CSND_SND::Initialize(Kernel::HLERequestContext& ctx) {
 void CSND_SND::Shutdown(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
 
+    for (auto& channel : channels) {
+        channel.playing = false;
+        channel.position = 0.0;
+    }
     if (mutex)
         mutex = nullptr;
     if (shared_memory)
@@ -255,10 +300,15 @@ void CSND_SND::ExecuteCommands(Kernel::HLERequestContext& ctx) {
 
         switch (command.command_id) {
         case CommandId::Start:
-            // TODO: start/stop the sound
+            if (command.start.value != 0) {
+                StartChannel(command.start.channel);
+            } else {
+                channels[command.start.channel].playing = false;
+                channels[command.start.channel].position = 0.0;
+            }
             break;
         case CommandId::Pause:
-            // TODO: pause/resume the sound
+            channels[command.pause.channel].playing = command.pause.value != 0;
             break;
         case CommandId::SetEncoding:
             channels[command.set_encoding.channel].encoding = command.set_encoding.value;
@@ -324,7 +374,7 @@ void CSND_SND::ExecuteCommands(Kernel::HLERequestContext& ctx) {
             channel.block2_address = configure.block2_address;
             channel.block1_size = channel.block2_size = configure.size;
             if (configure.enable_playback) {
-                // TODO: startthe sound
+                StartChannel(configure.channel);
             }
             break;
         }
@@ -332,6 +382,7 @@ void CSND_SND::ExecuteCommands(Kernel::HLERequestContext& ctx) {
             auto& configure = command.configure_psg;
             auto& channel = channels[configure.channel];
             channel.encoding = Encoding::Psg;
+            channel.is_noise = false;
             channel.psg_duty = configure.duty;
             channel.sample_rate = configure.sample_rate;
             channel.left_channel_volume = configure.left_channel_volume;
@@ -339,7 +390,8 @@ void CSND_SND::ExecuteCommands(Kernel::HLERequestContext& ctx) {
             channel.left_capture_volume = configure.left_capture_volume;
             channel.right_capture_volume = configure.right_capture_volume;
             if (configure.enable_playback) {
-                // TODO: startthe sound
+                channel.position = 0.0;
+                channel.playing = true;
             }
             break;
         }
@@ -347,12 +399,14 @@ void CSND_SND::ExecuteCommands(Kernel::HLERequestContext& ctx) {
             auto& configure = command.configure_psg_noise;
             auto& channel = channels[configure.channel];
             channel.encoding = Encoding::Psg;
+            channel.is_noise = true;
             channel.left_channel_volume = configure.left_channel_volume;
             channel.right_channel_volume = configure.right_channel_volume;
             channel.left_capture_volume = configure.left_capture_volume;
             channel.right_capture_volume = configure.right_capture_volume;
             if (configure.enable_playback) {
-                // TODO: startthe sound
+                channel.position = 0.0;
+                channel.playing = true;
             }
             break;
         }
@@ -365,9 +419,9 @@ void CSND_SND::ExecuteCommands(Kernel::HLERequestContext& ctx) {
                 if ((acquired_channel_mask & (1 << i)) == 0)
                     continue;
                 ChannelState state;
-                state.active = false;
+                state.active = channels[i].playing;
                 state.adpcm_predictor = channels[i].block1_adpcm_state.predictor;
-                state.adpcm_predictor = channels[i].block1_adpcm_state.step_index;
+                state.adpcm_step_index = channels[i].block1_adpcm_state.step_index;
                 state.zero = 0;
                 std::memcpy(
                     shared_memory->GetPointer(channel_state_offset + sizeof(state) * output_index),
@@ -500,10 +554,194 @@ void CSND_SND::InvalidateDataCache(Kernel::HLERequestContext& ctx) {
 void CSND_SND::Reset(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
 
+    for (auto& channel : channels) {
+        channel.playing = false;
+        channel.position = 0.0;
+    }
+
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
 
     LOG_WARNING(Service_CSND, "(STUBBED) called");
+}
+
+void CSND_SND::DecodeBlock(const Channel& channel, std::vector<s16>& output, PAddr address,
+                           u32 size, AdpcmState adpcm_state) {
+    output.clear();
+    if (address == 0 || size == 0 || channel.encoding == Encoding::Psg) {
+        return;
+    }
+    if (size > MaxDecodedBytes) {
+        LOG_WARNING(Service_CSND, "Block size 0x{:X} exceeds decode cap 0x{:X}; truncating", size,
+                    MaxDecodedBytes);
+        size = MaxDecodedBytes;
+    }
+    const u8* data = system.Memory().GetPhysicalPointer(address);
+    if (!data) {
+        LOG_WARNING(Service_CSND, "Unable to read CSND block at physical address 0x{:08X}", address);
+        return;
+    }
+    switch (channel.encoding) {
+    case Encoding::Pcm8: {
+        output.reserve(size);
+        for (u32 i = 0; i < size; ++i) {
+            output.push_back(static_cast<s16>(static_cast<u16>(data[i]) << 8));
+        }
+        break;
+    }
+    case Encoding::Pcm16: {
+        const u32 sample_count = size / 2;
+        output.reserve(sample_count);
+        for (u32 i = 0; i < sample_count; ++i) {
+            s16 sample;
+            std::memcpy(&sample, data + i * 2, sizeof(sample));
+            output.push_back(sample);
+        }
+        break;
+    }
+    case Encoding::Adpcm: {
+        // IMA-ADPCM, 4-bit nibbles, as used by CWAV files.
+        int predictor = adpcm_state.predictor;
+        int step_index = std::clamp(static_cast<int>(adpcm_state.step_index), 0, 88);
+        int step = ima_step_table[step_index];
+        output.reserve(size * 2);
+        for (u32 i = 0; i < size; ++i) {
+            for (int nibble : {data[i] >> 4, data[i] & 0xF}) {
+                int diff = step >> 3;
+                if (nibble & 1) {
+                    diff += step >> 2;
+                }
+                if (nibble & 2) {
+                    diff += step >> 1;
+                }
+                if (nibble & 4) {
+                    diff += step;
+                }
+                predictor += (nibble & 8) ? -diff : diff;
+                predictor = std::clamp(predictor, -32768, 32767);
+                output.push_back(static_cast<s16>(predictor));
+                step_index = std::clamp(step_index + ima_index_table[nibble], 0, 88);
+                step = ima_step_table[step_index];
+            }
+        }
+        break;
+    }
+    case Encoding::Psg:
+        break;
+    }
+}
+
+void CSND_SND::StartChannel(u32 index) {
+    Channel& channel = channels[index];
+    channel.position = 0.0;
+    channel.on_block2 = false;
+    DecodeBlock(channel, channel.block1_samples, channel.block1_address, channel.block1_size,
+                channel.block1_adpcm_state);
+    if (channel.loop_mode == LoopMode::Normal || channel.loop_mode == LoopMode::ConstantSize) {
+        DecodeBlock(channel, channel.block2_samples, channel.block2_address, channel.block2_size,
+                    channel.block2_adpcm_state);
+    }
+    channel.playing = true;
+}
+
+s16 CSND_SND::GetChannelSample(Channel& channel) {
+    if (channel.encoding == Encoding::Psg) {
+        if (channel.is_noise) {
+            // Simple 16-bit LFSR white noise generator.
+            channel.noise_lfsr = static_cast<u16>((channel.noise_lfsr >> 1) ^
+                                                  (-(channel.noise_lfsr & 1) & 0xB400u));
+            return (channel.noise_lfsr & 1) ? 32767 : -32767;
+        }
+        // PSG square wave, 32 source samples per full cycle.
+        const u32 phase = static_cast<u32>(channel.position) % 32;
+        const u32 high_samples = channel.psg_duty == 7 ? 0 : static_cast<u32>(channel.psg_duty) + 1;
+        if (high_samples == 0) {
+            return 0;
+        }
+        channel.position += GetChannelStep(channel);
+        return phase < high_samples ? 32767 : -32767;
+    }
+
+    auto& block = channel.on_block2 ? channel.block2_samples : channel.block1_samples;
+    if (block.empty()) {
+        channel.playing = false;
+        return 0;
+    }
+
+    double position = channel.position;
+    u32 index = static_cast<u32>(position);
+    if (index >= block.size()) {
+        // Reached the end of the current block.
+        if (!channel.on_block2 && channel.loop_mode != LoopMode::Manual &&
+            !channel.block2_samples.empty()) {
+            // Normal / ConstantSize looping: play block 1 once, then repeat block 2 forever.
+            channel.on_block2 = true;
+            channel.position = 0.0;
+            block = channel.block2_samples;
+        } else if (channel.loop_mode == LoopMode::Manual) {
+            // Manual mode: play block 1 endlessly, ignoring the size field.
+            channel.position = std::fmod(channel.position, static_cast<double>(block.size()));
+        } else {
+            // One-shot (or normal looping without loop data): stop playing.
+            channel.playing = false;
+            return 0;
+        }
+        // Re-read the position, which may have been reset by the block transition above.
+        position = channel.position;
+        index = static_cast<u32>(position);
+        if (index >= block.size()) {
+            channel.playing = false;
+            return 0;
+        }
+    }
+
+    s16 sample;
+    const double fraction = position - static_cast<double>(index);
+    if (channel.linear_interpolation && index + 1 < block.size()) {
+        const s32 sample0 = block[index];
+        const s32 sample1 = block[index + 1];
+        sample = static_cast<s16>(sample0 + static_cast<s32>((sample1 - sample0) * fraction));
+    } else {
+        sample = block[index];
+    }
+    channel.position += GetChannelStep(channel);
+    return sample;
+}
+
+void CSND_SND::MixChannel(u32 index, AudioCore::StereoFrame16& frame) {
+    Channel& channel = channels[index];
+    const s32 left_volume = channel.left_channel_volume;
+    const s32 right_volume = channel.right_channel_volume;
+    for (std::size_t s = 0; s < frame.size(); ++s) {
+        const s16 sample = GetChannelSample(channel);
+        if (!channel.playing) {
+            break; // One-shot ended; the rest of the frame stays silent.
+        }
+        frame[s][0] = static_cast<s16>(std::clamp((sample * left_volume) >> 15, -32768, 32767));
+        frame[s][1] = static_cast<s16>(std::clamp((sample * right_volume) >> 15, -32768, 32767));
+    }
+}
+
+void CSND_SND::AudioTickCallback(s64 cycles_late) {
+    if (shared_memory) {
+        AudioCore::StereoFrame16 frame{};
+        bool any_playing = false;
+        for (u32 i = 0; i < ChannelCount; ++i) {
+            if (channels[i].playing) {
+                any_playing = true;
+                MixChannel(i, frame);
+            }
+        }
+        if (any_playing) {
+            system.DSP().OutputFrame(frame);
+        }
+    }
+
+    const double time_scale =
+        Settings::values.enable_realtime_audio ? std::max(0.01, system.GetStableFrameTimeScale())
+                                               : 1.0;
+    s64 adjusted_ticks = static_cast<s64>(audio_frame_ticks / time_scale - cycles_late);
+    system.CoreTiming().ScheduleEvent(adjusted_ticks, tick_event);
 }
 
 CSND_SND::CSND_SND(Core::System& system) : ServiceFramework("csnd:SND", 4), system(system) {
@@ -525,6 +763,10 @@ CSND_SND::CSND_SND(Core::System& system) : ServiceFramework("csnd:SND", 4), syst
     };
 
     RegisterHandlers(functions);
+
+    tick_event = system.CoreTiming().RegisterEvent(
+        "CSND_SND::audio_tick", [this](u64, s64 cycles_late) { AudioTickCallback(cycles_late); });
+    system.CoreTiming().ScheduleEvent(audio_frame_ticks, tick_event);
 };
 
 void InstallInterfaces(Core::System& system) {

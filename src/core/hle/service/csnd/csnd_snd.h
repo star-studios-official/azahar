@@ -5,8 +5,11 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 #include <boost/serialization/array.hpp>
 #include <boost/serialization/shared_ptr.hpp>
+#include <boost/serialization/vector.hpp>
+#include "audio_core/audio_types.h"
 #include "common/archives.h"
 #include "core/hle/kernel/mutex.h"
 #include "core/hle/kernel/shared_memory.h"
@@ -14,6 +17,7 @@
 
 namespace Core {
 class System;
+struct TimingEventType;
 }
 
 namespace Service::CSND {
@@ -64,6 +68,15 @@ struct Channel {
     Encoding encoding = Encoding::Pcm8;
     u8 psg_duty = 0;
 
+    // Playback state (updated by the audio tick; not set by commands)
+    bool playing = false;
+    bool is_noise = false;
+    double position = 0.0; ///< Current source-sample position within the active block
+    bool on_block2 = false;
+    std::vector<s16> block1_samples; ///< Decoded mono samples of block 1
+    std::vector<s16> block2_samples; ///< Decoded mono samples of block 2 (loop data)
+    u16 noise_lfsr = 0xACE1;
+
 private:
     template <class Archive>
     void serialize(Archive& ar, const unsigned int) {
@@ -83,6 +96,13 @@ private:
         ar & loop_mode;
         ar & encoding;
         ar & psg_duty;
+        ar & playing;
+        ar & is_noise;
+        ar & position;
+        ar & on_block2;
+        ar & block1_samples;
+        ar & block2_samples;
+        ar & noise_lfsr;
     }
     friend class boost::serialization::access;
 };
@@ -238,6 +258,18 @@ private:
      */
     void Reset(Kernel::HLERequestContext& ctx);
 
+    /// Generates one 160-sample audio frame from the active CSND channels and pushes it to the sink.
+    void AudioTickCallback(s64 cycles_late);
+    /// Mixes the samples of one playing channel into the output frame.
+    void MixChannel(u32 index, AudioCore::StereoFrame16& frame);
+    /// Returns the next mono sample of the channel, advancing playback and handling loops.
+    s16 GetChannelSample(Channel& channel);
+    /// Decodes the block at the given physical address into mono samples.
+    void DecodeBlock(const Channel& channel, std::vector<s16>& output, PAddr address, u32 size,
+                     AdpcmState adpcm_state);
+    /// Resets playback to the start of block 1 and re-decodes the block data.
+    void StartChannel(u32 index);
+
     Core::System& system;
 
     std::shared_ptr<Kernel::Mutex> mutex = nullptr;
@@ -255,6 +287,9 @@ private:
     u32 type1_command_offset = 0;
 
     u32 acquired_channel_mask = 0;
+
+    static constexpr u64 audio_frame_ticks = 160 * 4096 * 2ull; ///< Matches the DSP HLE frame rate
+    Core::TimingEventType* tick_event = nullptr;
 
     template <class Archive>
     void serialize(Archive& ar, const unsigned int) {

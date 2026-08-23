@@ -20,8 +20,9 @@ struct FrameBuffer;
 inline constexpr std::string_view FrontCameraPlaceholder = "ios:front";
 inline constexpr std::string_view BackCameraPlaceholder = "ios:back";
 
-/// AVFoundation-backed camera implementation. Frames are delivered as RGB565
-/// at the resolution requested by SetResolution.
+/// AVFoundation-backed camera implementation. Frames are delivered in the
+/// format requested by SetFormat (YUV422 packed YUYV or RGB565) at the
+/// resolution requested by SetResolution.
 class Interface final : public CameraInterface {
 public:
     explicit Interface(const std::string& config, const Service::CAM::Flip& flip);
