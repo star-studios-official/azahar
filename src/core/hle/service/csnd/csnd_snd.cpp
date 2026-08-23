@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "audio_core/audio_types.h"
+#include "audio_core/dsp_interface.h"
 #include "common/alignment.h"
 #include "common/archives.h"
 #include "common/settings.h"
