@@ -239,6 +239,16 @@ void Interface::StartCapture() {
     }
     [session addOutput:output];
 
+    // The 3DS inner/outer cameras all produce landscape (640x480) images.
+    // iOS cameras default to portrait orientation for the front camera.
+    // Set landscape orientation on the connection so the pixel data matches
+    // what the 3DS application expects.
+    for (AVCaptureConnection* conn in output.connections) {
+        if (conn.isVideoOrientationSupported) {
+            conn.videoOrientation = AVCaptureVideoOrientationLandscapeLeft;
+        }
+    }
+
     dispatch_async(queue, ^{
       [session startRunning];
     });

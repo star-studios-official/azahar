@@ -734,6 +734,10 @@ void CSND_SND::AudioTickCallback(s64 cycles_late) {
             }
         }
         if (any_playing) {
+            if (!reported_playing) {
+                LOG_INFO(Service_CSND, "CSND producing audio output");
+                reported_playing = true;
+            }
             system.DSP().OutputFrame(frame);
         }
     }

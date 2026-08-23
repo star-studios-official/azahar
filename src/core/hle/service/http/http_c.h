@@ -777,6 +777,66 @@ private:
     void AddDefaultCert(Kernel::HLERequestContext& ctx);
 
     /**
+     * HTTP_C::SelectRootCertChain service function
+     *  Inputs:
+     *      1 : HTTP context handle
+     *      2 : RootCertChain context handle
+     *  Outputs:
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void SelectRootCertChain(Kernel::HLERequestContext& ctx);
+
+    /**
+     * HTTP_C::CreateRootCertChain service function
+     *  Outputs:
+     *      1 : Result of function, 0 on success, otherwise error code
+     *      2 : RootCertChain context handle
+     */
+    void CreateRootCertChain(Kernel::HLERequestContext& ctx);
+
+    /**
+     * HTTP_C::DestroyRootCertChain service function
+     *  Inputs:
+     *      1 : RootCertChain context handle
+     *  Outputs:
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void DestroyRootCertChain(Kernel::HLERequestContext& ctx);
+
+    /**
+     * HTTP_C::RootCertChainAddCert service function
+     *  Inputs:
+     *      1 : RootCertChain context handle
+     *      2 : Cert data length
+     *      3-4: (Mapped buffer) Cert data
+     *  Outputs:
+     *      1 : Result of function, 0 on success, otherwise error code
+     *      2-3: (Mapped buffer) Cert data
+     */
+    void RootCertChainAddCert(Kernel::HLERequestContext& ctx);
+
+    /**
+     * HTTP_C::RootCertChainAddDefaultCert service function
+     *  Inputs:
+     *      1 : RootCertChain context handle
+     *      2 : CertID
+     *  Outputs:
+     *      1 : Result of function, 0 on success, otherwise error code
+     *      2 : Cert context handle
+     */
+    void RootCertChainAddDefaultCert(Kernel::HLERequestContext& ctx);
+
+    /**
+     * HTTP_C::RootCertChainRemoveCert service function
+     *  Inputs:
+     *      1 : RootCertChain context handle
+     *      2 : Cert context handle
+     *  Outputs:
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void RootCertChainRemoveCert(Kernel::HLERequestContext& ctx);
+
+    /**
      * GetResponseStatusCodeImpl:
      *  Implements GetResponseStatusCode and GetResponseStatusCodeTimeout service functions
      */

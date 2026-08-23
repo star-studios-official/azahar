@@ -1667,6 +1667,80 @@ void HTTP_C::AddDefaultCert(Kernel::HLERequestContext& ctx) {
     rb.Push(ResultSuccess);
 }
 
+void HTTP_C::SelectRootCertChain(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const Context::Handle context_handle = rp.Pop<u32>();
+    const u32 root_cert_chain_handle = rp.Pop<u32>();
+
+    LOG_WARNING(Service_HTTP, "(STUBBED) called, context_handle={}, root_cert_chain_handle={}",
+                context_handle, root_cert_chain_handle);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
+void HTTP_C::CreateRootCertChain(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+
+    LOG_WARNING(Service_HTTP, "(STUBBED) called");
+
+    // Return a dummy handle (1) for the root cert chain.
+    IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
+    rb.Push(ResultSuccess);
+    rb.Push<u32>(1);
+}
+
+void HTTP_C::DestroyRootCertChain(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const u32 root_cert_chain_handle = rp.Pop<u32>();
+
+    LOG_WARNING(Service_HTTP, "(STUBBED) called, root_cert_chain_handle={}",
+                root_cert_chain_handle);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
+void HTTP_C::RootCertChainAddCert(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const u32 root_cert_chain_handle = rp.Pop<u32>();
+    [[maybe_unused]] const u32 cert_len = rp.Pop<u32>();
+    auto cert_data = rp.PopMappedBuffer();
+
+    LOG_WARNING(Service_HTTP, "(STUBBED) called, root_cert_chain_handle={}",
+                root_cert_chain_handle);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 1);
+    rb.Push(ResultSuccess);
+    rb.PushMappedBuffer(cert_data);
+}
+
+void HTTP_C::RootCertChainAddDefaultCert(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const u32 root_cert_chain_handle = rp.Pop<u32>();
+    const u32 cert_id = rp.Pop<u32>();
+
+    LOG_WARNING(Service_HTTP, "(STUBBED) called, root_cert_chain_handle={}, cert_id={}",
+                root_cert_chain_handle, cert_id);
+
+    // Return a dummy cert context handle.
+    IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
+    rb.Push(ResultSuccess);
+    rb.Push<u32>(1);
+}
+
+void HTTP_C::RootCertChainRemoveCert(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const u32 root_cert_chain_handle = rp.Pop<u32>();
+    const u32 cert_handle = rp.Pop<u32>();
+
+    LOG_WARNING(Service_HTTP, "(STUBBED) called, root_cert_chain_handle={}, cert_handle={}",
+                root_cert_chain_handle, cert_handle);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
 void HTTP_C::SetDefaultClientCert(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
     const Context::Handle context_handle = rp.Pop<u32>();
@@ -2322,18 +2396,18 @@ HTTP_C::HTTP_C() : ServiceFramework("http:C", 32) {
         {0x0023, &HTTP_C::GetResponseStatusCodeTimeout, "GetResponseStatusCodeTimeout"},
         {0x0024, &HTTP_C::AddTrustedRootCA, "AddTrustedRootCA"},
         {0x0025, &HTTP_C::AddDefaultCert, "AddDefaultCert"},
-        {0x0026, nullptr, "SelectRootCertChain"},
+        {0x0026, &HTTP_C::SelectRootCertChain, "SelectRootCertChain"},
         {0x0027, nullptr, "SetClientCert"},
         {0x0028, &HTTP_C::SetDefaultClientCert, "SetDefaultClientCert"},
         {0x0029, &HTTP_C::SetClientCertContext, "SetClientCertContext"},
         {0x002A, &HTTP_C::GetSSLError, "GetSSLError"},
         {0x002B, &HTTP_C::SetSSLOpt, "SetSSLOpt"},
         {0x002C, nullptr, "SetSSLClearOpt"},
-        {0x002D, nullptr, "CreateRootCertChain"},
-        {0x002E, nullptr, "DestroyRootCertChain"},
-        {0x002F, nullptr, "RootCertChainAddCert"},
-        {0x0030, nullptr, "RootCertChainAddDefaultCert"},
-        {0x0031, nullptr, "RootCertChainRemoveCert"},
+        {0x002D, &HTTP_C::CreateRootCertChain, "CreateRootCertChain"},
+        {0x002E, &HTTP_C::DestroyRootCertChain, "DestroyRootCertChain"},
+        {0x002F, &HTTP_C::RootCertChainAddCert, "RootCertChainAddCert"},
+        {0x0030, &HTTP_C::RootCertChainAddDefaultCert, "RootCertChainAddDefaultCert"},
+        {0x0031, &HTTP_C::RootCertChainRemoveCert, "RootCertChainRemoveCert"},
         {0x0032, &HTTP_C::OpenClientCertContext, "OpenClientCertContext"},
         {0x0033, &HTTP_C::OpenDefaultClientCertContext, "OpenDefaultClientCertContext"},
         {0x0034, &HTTP_C::CloseClientCertContext, "CloseClientCertContext"},

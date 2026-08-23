@@ -288,6 +288,8 @@ private:
 
     u32 acquired_channel_mask = 0;
 
+    bool reported_playing = false; ///< One-shot flag for diagnostic logging
+
     static constexpr u64 audio_frame_ticks = 160 * 4096 * 2ull; ///< Matches the DSP HLE frame rate
     Core::TimingEventType* tick_event = nullptr;
 
