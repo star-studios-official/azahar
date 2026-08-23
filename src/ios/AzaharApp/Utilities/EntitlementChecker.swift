@@ -27,24 +27,52 @@ func releaseSecTask(_ task: SecTaskRef) {
     CFRelease(cf)
 }
 
-/// Check if app has a specific entitlement
-func checkAppEntitlement(_ entitlement: String) -> Bool {
+/// Raw runtime value of an entitlement granted to the current process, or nil if the
+/// entitlement is not present in the process's active code signature.
+func runtimeEntitlementValue(_ entitlement: String) -> CFTypeRef? {
     guard let task = SecTaskCreateFromSelf(nil) else {
-        return false
+        return nil
     }
     defer {
         releaseSecTask(task)
     }
-    
-    guard let value = SecTaskCopyValueForEntitlement(task, entitlement as NSString, nil) else {
+    return SecTaskCopyValueForEntitlement(task, entitlement as NSString, nil)
+}
+
+/// Check if the app has a specific entitlement granted at runtime.
+func checkAppEntitlement(_ entitlement: String) -> Bool {
+    guard let value = runtimeEntitlementValue(entitlement) else {
         return false
     }
-    
+
     if let number = value as? NSNumber {
         return number.boolValue
     } else if let bool = value as? Bool {
         return bool
     }
-    
-    return false
+
+    // Non-boolean entitlements (arrays, strings) count as present when non-empty.
+    return true
+}
+
+/// Entitlements the app declares in its bundle: the Azahar.entitlements file copied next to the
+/// app (the CI does this) or the entitlements plist the signing tool embedded in _CodeSignature/.
+/// Returns a dictionary of entitlement key -> plist value, or an empty dict when neither is found.
+func declaredEntitlements() -> [String: Any] {
+    let candidates: [URL] = [
+        Bundle.main.url(forResource: "Azahar", withExtension: "entitlements"),
+        Bundle.main.url(forResource: "entitlements", withExtension: "plist",
+                        subdirectory: "_CodeSignature"),
+    ].compactMap { $0 }
+
+    for url in candidates {
+        guard let data = try? Data(contentsOf: url),
+              let plist = try? PropertyListSerialization.propertyList(from: data, options: [],
+                                                                      format: nil),
+              let dict = plist as? [String: Any] else {
+            continue
+        }
+        return dict
+    }
+    return [:]
 }

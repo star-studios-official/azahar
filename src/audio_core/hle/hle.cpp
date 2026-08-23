@@ -64,6 +64,11 @@ public:
     void SetInterruptHandler(
         std::function<void(Service::DSP::InterruptType type, DspPipe pipe)> handler);
 
+    /// Bring the DSP to the On state and publish the DSP memory layout, as if the loaded firmware
+    /// component had booted on real hardware. Used when the component is loaded directly, before
+    /// any Initialize command is sent (see DspHle::LoadComponent).
+    void BootFromComponentLoad();
+
 private:
     void Initialize();
     void Sleep();
@@ -297,6 +302,12 @@ void DspHle::Impl::SetInterruptHandler(
     interrupt_handler = handler;
 }
 
+void DspHle::Impl::BootFromComponentLoad() {
+    Initialize();
+    AudioPipeWriteStructAddresses();
+    dsp_state = DspState::On;
+}
+
 void DspHle::Impl::Initialize() {
     // TODO(PabloMK7): This is NOT the right way to do this,
     // but it is close enough. This makes sure the DSP state
@@ -524,9 +535,7 @@ void DspHle::LoadComponent(std::span<const u8> component_data) {
     // interrupt before they send the Initialize command / start writing audio data, so bring the
     // HLE DSP to the "On" state here and publish the DSP memory layout like Initialize does.
     // Without this the DSP stays Off and the application's audio thread never gets unblocked.
-    impl->Initialize();
-    impl->AudioPipeWriteStructAddresses();
-    impl->dsp_state = DspState::On;
+    impl->BootFromComponentLoad();
 }
 
 void DspHle::UnloadComponent() {

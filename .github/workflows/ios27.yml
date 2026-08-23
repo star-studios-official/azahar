@@ -142,6 +142,29 @@ jobs:
           # Copy app bundle to Payload
           cp -r "$APP_PATH" artifacts/Payload/
           
+          # Embed the entitlements INTO the Mach-O binary itself, exactly like
+          # UTM's scripts/package.sh fake_sign(): `ldid -S<entitlements> -I<bundle_id> <binary>`.
+          # A loose .entitlements file / _CodeSignature plist is NOT enough: at runtime
+          # SecTaskCopyValueForEntitlement reads the code-signature blob inside the binary, and
+          # PlumeImpactor/AltStore read macho.entitlements() from the binary when requesting the
+          # provisioning profile. Without this, only get-task-allow ever survives. ldid works on
+          # macOS and Linux (installed via Homebrew, same as UTM's CI).
+          brew install ldid || true
+          if ! command -v ldid >/dev/null 2>&1; then
+            echo "ERROR: ldid not available (brew install ldid failed)"
+            exit 1
+          fi
+          ldid -S"src/ios/AzaharApp/Resources/Azahar.entitlements" \
+               -I"org.azahar_emu.Azahar" \
+               "artifacts/Payload/Azahar.app/Azahar"
+          echo "=== Entitlements embedded in Mach-O binary: ==="
+          ldid -e "artifacts/Payload/Azahar.app/Azahar"
+          if ! ldid -e "artifacts/Payload/Azahar.app/Azahar" | grep -q "increased-memory-limit"; then
+            echo "ERROR: increased-memory-limit NOT found in binary entitlements"
+            exit 1
+          fi
+          echo "OK: com.apple.developer.kernel.increased-memory-limit is embedded in the binary"
+          
           # Verify final bundle structure
           echo "App bundle contents:"
           ls -la "artifacts/Payload/Azahar.app/" | head -30
@@ -177,9 +200,90 @@ jobs:
         with:
           name: ios-${{ matrix.variant }}-ipa
           path: artifacts/*.ipa
-          
+
       - name: Upload debug symbols
         uses: actions/upload-artifact@v7
         with:
           name: ios-${{ matrix.variant }}-dsyms
           path: build-ios/**/*.dSYM
+
+  # Manual job: sign the unsigned IPA with your free-account certificate + provisioning
+  # profile, embedding the entitlements into the signed binary so the runtime sees
+  # increased-memory-limit etc. Requires these repo secrets:
+  #   IOS_CERT_P12_BASE64         - base64 of the .p12 exported from PlumeImpactor
+  #                                 (Settings -> Export P12; empty password)
+  #   IOS_MOBILEPROVISION_BASE64  - base64 of the .mobileprovision for your device
+  #                                 (from a previous PlumeImpactor install of Azahar:
+  #                                  Payload/Azahar.app/embedded.mobileprovision)
+  # Trigger with: Actions -> ios-build-27 -> Run workflow. Free-account certs/profiles
+  # expire after ~7 days, so refresh the secrets when the install fails with a
+  # provisioning error.
+  sign-ipa:
+    name: Sign IPA with free certificate
+    runs-on: ubuntu-latest
+    needs: ios-build
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Install ldid
+        run: brew install ldid
+
+      - name: Download unsigned IPA
+        uses: actions/download-artifact@v7
+        with:
+          # ios-build matrix has a single variant "standard", so the artifact is ios-standard-ipa
+          name: ios-standard-ipa
+          path: unsigned
+
+      - name: Decode certificate and provisioning profile from secrets
+        env:
+          IOS_CERT_P12_BASE64: ${{ secrets.IOS_CERT_P12_BASE64 }}
+          IOS_MOBILEPROVISION_BASE64: ${{ secrets.IOS_MOBILEPROVISION_BASE64 }}
+        run: |
+          if [ -z "$IOS_CERT_P12_BASE64" ] || [ -z "$IOS_MOBILEPROVISION_BASE64" ]; then
+            echo "ERROR: set IOS_CERT_P12_BASE64 and IOS_MOBILEPROVISION_BASE64 secrets"
+            exit 1
+          fi
+          echo "$IOS_CERT_P12_BASE64" | base64 --decode > cert.p12
+          echo "$IOS_MOBILEPROVISION_BASE64" | base64 --decode > embedded.mobileprovision
+
+      - name: Extract certificate and key from P12
+        run: |
+          # PlumeImpactor's Export P12 writes an empty password
+          openssl pkcs12 -in cert.p12 -nodes -clcerts -passin pass: -out cert.pem
+          openssl pkcs12 -in cert.p12 -nodes -nocerts -passin pass: -out key.pem
+
+      - name: Sign IPA with entitlements
+        run: |
+          mkdir -p Payload
+          unzip -q unsigned/Azahar.ipa -d .
+          ldid -S"src/ios/AzaharApp/Resources/Azahar.entitlements" \
+               -I"org.azahar_emu.Azahar" \
+               -K"key.pem" \
+               -C"cert.pem" \
+               -M"embedded.mobileprovision" \
+               "Payload/Azahar.app/Azahar"
+          # Also drop the profile in the bundle where installers look for it
+          cp embedded.mobileprovision "Payload/Azahar.app/embedded.mobileprovision"
+          zip -q -r Azahar-signed.ipa Payload
+
+      - name: Verify entitlements in signed binary
+        run: |
+          echo "=== Entitlements in signed binary: ==="
+          ldid -e "Payload/Azahar.app/Azahar"
+          ldid -e "Payload/Azahar.app/Azahar" | grep -q "increased-memory-limit" \
+            && echo "OK: increased-memory-limit embedded in signed binary" \
+            || { echo "FAIL: increased-memory-limit missing from signed binary"; exit 1; }
+          unzip -l Azahar-signed.ipa | grep -q "embedded.mobileprovision" \
+            && echo "OK: provisioning profile embedded in IPA" \
+            || { echo "FAIL: no embedded.mobileprovision in IPA"; exit 1; }
+
+      - name: Upload signed IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-signed-ipa
+          path: Azahar-signed.ipa

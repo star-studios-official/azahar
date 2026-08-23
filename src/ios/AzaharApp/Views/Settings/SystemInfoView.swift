@@ -84,51 +84,13 @@ struct SystemInfoView: View {
             
             // Entitlements Section
             Section {
-                EntitlementRow(
-                    name: "JIT Compilation",
-                    key: "com.apple.security.cs.allow-jit",
-                    icon: "bolt.circle"
-                )
-                
-                EntitlementRow(
-                    name: "Unsigned Executable Memory",
-                    key: "com.apple.security.cs.allow-unsigned-executable-memory",
-                    icon: "memorychip"
-                )
-                
-                EntitlementRow(
-                    name: "Debugger Attachment",
-                    key: "get-task-allow",
-                    icon: "ant.circle"
-                )
-                
-                EntitlementRow(
-                    name: "Increased Memory Limit",
-                    key: "com.apple.developer.kernel.increased-memory-limit",
-                    icon: "memorychip.fill"
-                )
-                
-                EntitlementRow(
-                    name: "Network Client",
-                    key: "com.apple.security.network.client",
-                    icon: "network"
-                )
-                
-                EntitlementRow(
-                    name: "Network Server",
-                    key: "com.apple.security.network.server",
-                    icon: "server.rack"
-                )
-                
-                EntitlementRow(
-                    name: "Disable Library Validation",
-                    key: "com.apple.security.cs.disable-library-validation",
-                    icon: "books.vertical"
-                )
+                ForEach(entitlementDescriptors, id: \.key) { descriptor in
+                    EntitlementRow(descriptor: descriptor)
+                }
             } header: {
                 Text("Entitlements")
             } footer: {
-                Text("Entitlements control what system capabilities the app has access to. JIT entitlements require proper code signing or StikDebug.")
+                Text("Declared = present in Azahar.entitlements. Granted = the current code signature actually provides it. Free-account signing tools (e.g. PlumeImpactor) typically only grant get-task-allow; StikDebug grants the dynamic-codesigning entitlement at runtime, which is what enables JIT here.")
             }
             
             // Device Information Section
@@ -233,69 +195,103 @@ struct SystemInfoView: View {
     }
     
     private var hasJITEntitlement: Bool {
-        checkEntitlement("com.apple.security.cs.allow-jit") ||
-        checkEntitlement("get-task-allow") ||
-        checkEntitlement("dynamic-codesigning")
+        checkAppEntitlement("com.apple.security.cs.allow-jit") ||
+        checkAppEntitlement("get-task-allow") ||
+        checkAppEntitlement("dynamic-codesigning")
     }
 }
 
-struct EntitlementRow: View {
+private struct EntitlementDescriptor {
     let name: String
     let key: String
     let icon: String
-    
-    @State private var isEnabled: Bool = false
+}
+
+/// Entitlements the app cares about. The declared set mirrors Azahar.entitlements;
+/// dynamic-codesigning is added because StikDebug grants it at runtime (it is the JIT enabler).
+private let entitlementDescriptors: [EntitlementDescriptor] = [
+    EntitlementDescriptor(name: "JIT Compilation",
+                          key: "com.apple.security.cs.allow-jit",
+                          icon: "bolt.circle"),
+    EntitlementDescriptor(name: "Unsigned Executable Memory",
+                          key: "com.apple.security.cs.allow-unsigned-executable-memory",
+                          icon: "memorychip"),
+    EntitlementDescriptor(name: "Debugger Attachment",
+                          key: "get-task-allow",
+                          icon: "ant.circle"),
+    EntitlementDescriptor(name: "Increased Memory Limit",
+                          key: "com.apple.developer.kernel.increased-memory-limit",
+                          icon: "memorychip.fill"),
+    EntitlementDescriptor(name: "Malloc Debugging",
+                          key: "com.apple.developer.kernel.allow-malloc-debugging",
+                          icon: "ladybug"),
+    EntitlementDescriptor(name: "Network Client",
+                          key: "com.apple.security.network.client",
+                          icon: "network"),
+    EntitlementDescriptor(name: "Network Server",
+                          key: "com.apple.security.network.server",
+                          icon: "server.rack"),
+    EntitlementDescriptor(name: "Disable Library Validation",
+                          key: "com.apple.security.cs.disable-library-validation",
+                          icon: "books.vertical"),
+    EntitlementDescriptor(name: "Network Extension",
+                          key: "com.apple.developer.networking.networkextension",
+                          icon: "globe.americas.fill"),
+    EntitlementDescriptor(name: "StikDebug JIT (dynamic-codesigning)",
+                          key: "com.apple.security.cs.dynamic-codesigning",
+                          icon: "bolt.shield.fill"),
+]
+
+struct EntitlementRow: View {
+    let descriptor: EntitlementDescriptor
     
     var body: some View {
+        let declared = declaredEntitlements()[descriptor.key] != nil
+        let granted = checkAppEntitlement(descriptor.key)
+        
         HStack {
-            Image(systemName: icon)
-                .foregroundStyle(isEnabled ? .green : .secondary)
+            Image(systemName: descriptor.icon)
+                .foregroundStyle(granted ? .green : declared ? .orange : .secondary)
                 .frame(width: 24)
             
             VStack(alignment: .leading, spacing: 2) {
-                Text(name)
+                Text(descriptor.name)
                     .font(.body)
                 
-                Text(key)
+                Text(descriptor.key)
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
+                
+                Text(statusText(declared: declared, granted: granted))
+                    .font(.caption2)
+                    .foregroundStyle(granted ? .green : declared ? .orange : .secondary)
             }
             
             Spacer()
             
-            if isEnabled {
+            if granted {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
+            } else if declared {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
             } else {
                 Image(systemName: "xmark.circle")
                     .foregroundStyle(.secondary)
             }
         }
-        .onAppear {
-            isEnabled = checkEntitlement(key)
+    }
+    
+    private func statusText(declared: Bool, granted: Bool) -> String {
+        if granted {
+            return "Granted"
+        } else if declared {
+            return "Declared, not granted by current signature"
+        } else {
+            return "Not present"
         }
     }
-}
-
-private func checkEntitlement(_ entitlement: String) -> Bool {
-    guard let task = SecTaskCreateFromSelf(nil) else {
-        return false
-    }
-    
-    guard let value = SecTaskCopyValueForEntitlement(task, entitlement as CFString, nil) else {
-        return false
-    }
-    
-    // Handle CFTypeRef by checking if it's NSNumber or Bool (MeloNX pattern)
-    if let number = value as? NSNumber {
-        return number.boolValue
-    } else if let bool = value as? Bool {
-        return bool
-    }
-    
-    // If entitlement exists but is not a boolean, consider it present
-    return true
 }
 
 struct SystemInfoView_Previews: PreviewProvider {
