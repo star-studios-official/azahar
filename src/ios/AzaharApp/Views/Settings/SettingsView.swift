@@ -265,7 +265,6 @@ struct SettingsView: View {
                 settingsSection("Audio", icon: "speaker.wave.2") {
                     SettingPicker(
                         title: "Audio Emulation",
-                        description: "HLE is the recommended backend. LLE runs the real DSP firmware and is significantly slower.",
                         group: "Audio", key: "audio_emulation",
                         options: [
                             (0, "HLE (recommended)"),
