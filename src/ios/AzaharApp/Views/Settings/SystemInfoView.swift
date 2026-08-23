@@ -243,7 +243,7 @@ private let entitlementDescriptors: [EntitlementDescriptor] = [
 ]
 
 struct EntitlementRow: View {
-    let descriptor: EntitlementDescriptor
+    fileprivate let descriptor: EntitlementDescriptor
     
     var body: some View {
         let declared = declaredEntitlements()[descriptor.key] != nil
