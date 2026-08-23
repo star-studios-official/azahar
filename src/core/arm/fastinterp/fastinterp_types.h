@@ -60,6 +60,7 @@ enum class Opcode : u16 {
     MulS,
     Mla,
     MlaS,
+    Umaal,
     Umull,
     UmullS,
     Umlal,

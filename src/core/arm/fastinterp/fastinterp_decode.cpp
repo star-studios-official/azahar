@@ -138,6 +138,7 @@ static u8 ComputeTicks(const DecodedInst& inst, bool is_thumb) {
     case Opcode::Smull:
     case Opcode::Umlal:
     case Opcode::Smlal:
+    case Opcode::Umaal:
         return 3;
     case Opcode::UmullS:
     case Opcode::SmullS:
@@ -329,6 +330,7 @@ FlagEffects ClassifyFlagEffects(const DecodedInst& inst) {
     case Opcode::Umlal:
     case Opcode::Smull:
     case Opcode::Smlal:
+    case Opcode::Umaal:
         return {0, 0, false};
     case Opcode::MulS:
     case Opcode::MlaS:
@@ -1681,6 +1683,12 @@ static void DecodeArmDataProcRegOrMisc(u32 inst, DecodedInst& out) {
             break;
         case 0x1:
             out.opcode = s_flag ? Opcode::MlaS : Opcode::Mla;
+            break;
+        case 0x2:
+            // UMAAL (ARMv6): RdHi:RdLo = Rm * Rs + RdHi + RdLo. No S flag.
+            out.opcode = Opcode::Umaal;
+            out.mul.rdhi = (inst >> 16) & 0xF;
+            out.rd = (inst >> 12) & 0xF;
             break;
         case 0x4:
             out.opcode = s_flag ? Opcode::UmullS : Opcode::Umull;

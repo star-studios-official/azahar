@@ -2,9 +2,9 @@
 // Licensed under GPLv2 or any later version
 // Refer to the license.txt file included.
 
-// ARM Multiply handlers: Mul, MulS, Mla, MlaS, Umull, UmullS, Umlal, UmlalS,
-//     Smull, SmullS, Smlal, SmlalS, and the halfword forms Smulxy, Smlaxy,
-//     Smulwy, Smlawy, Smlalxy
+// ARM Multiply handlers: Mul, MulS, Mla, MlaS, Umaal, Umull, UmullS, Umlal,
+//     UmlalS, Smull, SmullS, Smlal, SmlalS, and the halfword forms Smulxy,
+//     Smlaxy, Smulwy, Smlawy, Smlalxy
 
 handle_Mul: {
     CHECK_COND();
@@ -37,6 +37,19 @@ handle_MlaS: {
     state_.lazy_flags.Materialize();
     state_.lazy_flags.op = FlagOp::Mul;
     state_.lazy_flags.result = result;
+    ADVANCE_AND_DISPATCH();
+}
+
+handle_Umaal: {
+    CHECK_COND();
+    // UMAAL (ARMv6): RdHi:RdLo = Rm * Rs + RdHi + RdLo, all unsigned. The
+    // accumulate reads the original RdHi/RdLo, so capture both before writing.
+    const u32 rdlo_val = state_.regs[inst->rd];
+    const u32 rdhi_val = state_.regs[inst->mul.rdhi];
+    u64 result = static_cast<u64>(state_.regs[inst->mul.rm]) * state_.regs[inst->mul.rs] +
+                 static_cast<u64>(rdhi_val) + rdlo_val;
+    state_.regs[inst->rd] = static_cast<u32>(result);
+    state_.regs[inst->mul.rdhi] = static_cast<u32>(result >> 32);
     ADVANCE_AND_DISPATCH();
 }
 

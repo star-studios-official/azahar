@@ -355,8 +355,8 @@ graphics_api = 2
 
 [Audio]
 
-# Whether or not audio emulation should be enabled
-# 0: Disabled, 1 (default): Enabled
+# Which audio emulation backend to use
+# 0: HLE (default, recommended), 1: LLE, 2: LLE Multithreaded
 )") DECLARE_KEY(audio_emulation) BOOST_HANA_STRING(R"(
 
 # Whether or not to enable the audio-stretching post-processing effect

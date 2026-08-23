@@ -236,6 +236,7 @@ u64 ARM_FastInterp::ExecuteBlock(BasicBlock* block) {
         HANDLER(MulS),
         HANDLER(Mla),
         HANDLER(MlaS),
+        HANDLER(Umaal),
         HANDLER(Umull),
         HANDLER(UmullS),
         HANDLER(Umlal),
