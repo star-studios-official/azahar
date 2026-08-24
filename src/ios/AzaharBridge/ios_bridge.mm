@@ -17,6 +17,15 @@
 
 #include <QuartzCore/QuartzCore.h>
 
+// Fresh git info regenerated at every build (see CMakeModules/GenerateIOSBuildInfo.cmake).
+// Declared here (not in azahar_ios.h) because the bridging header is parsed as
+// Objective-C and cannot contain C++ namespaces.
+namespace Azahar {
+extern const char* GetIOSBuildCommit();
+extern const char* GetIOSBuildBranch();
+extern const char* GetIOSBuildDate();
+} // namespace Azahar
+
 #include "common/arch.h"
 #include "common/aarch64/cpu_detect.h"
 #include "common/common_paths.h"
