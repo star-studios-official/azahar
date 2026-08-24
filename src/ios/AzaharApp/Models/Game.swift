@@ -35,17 +35,21 @@ struct Game: Identifiable, Hashable {
         }
     }
 
-    /// Whether this game can be inserted as a virtual game card (.3ds / .cci)
+    /// Whether this game can be inserted as a virtual game card (.3ds / .cci / .nds)
     var isGameCardEligible: Bool {
         let ext = (path as NSString).pathExtension.lowercased()
-        return ext == "3ds" || ext == "cci" || ext == "z3ds" || ext == "zcci"
+        return ext == "3ds" || ext == "cci" || ext == "z3ds" || ext == "zcci" ||
+            ext == "nds" || ext == "dsi"
     }
 }
 
 /// Scans the user directory for game files.
 enum GameScanner {
     private static let supportedExtensions: Set<String> = [
-        "3ds", "3dsx", "cxi", "app", "cia", "ncch", "cci", "z3ds", "zcci", "zcxi"
+        "3ds", "3dsx", "cxi", "app", "cia", "ncch", "cci", "z3ds", "zcci", "zcxi",
+        // TWL (DS/DSi) and AGB (GBA) ROMs; playback requires the TWL_FIRM/AGB_FIRM
+        // subsystems, but the files are recognized and can be inserted as game cards.
+        "nds", "dsi", "gba"
     ]
 
     static func scan(userDirectory: String) -> [Game] {

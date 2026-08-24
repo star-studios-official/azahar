@@ -57,10 +57,12 @@ struct TouchControlsView: View {
                 }
             }
             
-            // Always show pause button (even with controller)
+            // Always show system buttons (even with controller): HOME + pause
             VStack {
                 HStack {
                     Spacer()
+                    HomeButtonView()
+                        .padding(.trailing, 8)
                     Button {
                         viewModel.togglePause()
                     } label: {
@@ -355,6 +357,42 @@ struct TouchControlsView: View {
             .background(.black.opacity(0.7), in: RoundedRectangle(cornerRadius: 12))
             .padding()
         }
+    }
+}
+
+/// System HOME button. No PNG asset exists on iOS (Android uses a vector drawable),
+/// so this renders an SF Symbol that sends the HOME button press/release to the core.
+/// The core's applet manager detects the rising edge and sends the HomeButtonSingle
+/// notification, suspending the running applet and returning to the Home Menu (when
+/// the Home Menu applet is registered).
+struct HomeButtonView: View {
+    @State private var isPressed = false
+
+    var body: some View {
+        Image(systemName: "house.fill")
+            .font(.system(size: 22))
+            .foregroundStyle(.white.opacity(0.9))
+            .frame(width: 44, height: 44)
+            .background(
+                isPressed ? Color.white.opacity(0.4) : Color.black.opacity(0.45),
+                in: Circle()
+            )
+            .shadow(radius: 2)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        if !isPressed {
+                            isPressed = true
+                            AppLogger.debug("[TouchControl] HOME pressed")
+                            az_button_event(Int32(AZ_BUTTON_HOME), true)
+                        }
+                    }
+                    .onEnded { _ in
+                        isPressed = false
+                        AppLogger.debug("[TouchControl] HOME released")
+                        az_button_event(Int32(AZ_BUTTON_HOME), false)
+                    }
+            )
     }
 }
 

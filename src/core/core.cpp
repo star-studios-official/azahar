@@ -866,6 +866,16 @@ void System::InsertCartridge(const std::string& path) {
     if (cartridge_container.LoadHeader() == Loader::ResultStatus::Success &&
         cartridge_container.IsNCSD()) {
         inserted_cartridge = path;
+        return;
+    }
+
+    // TWL (DS/DSi) ROMs are not NCSD containers; accept them by extension so the
+    // Home Menu's game-card-present checks see a card inserted. Playing them
+    // requires the TWL_FIRM subsystem (melonDS-based); until then this only makes
+    // the cartridge slot state reflect the inserted .nds/.dsi file.
+    const std::string ext(FileUtil::GetExtensionFromFilename(path));
+    if (ext == "nds" || ext == "dsi" || ext == "gba") {
+        inserted_cartridge = path;
     }
 }
 
