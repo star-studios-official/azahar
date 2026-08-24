@@ -36,8 +36,63 @@ add_library(azahar_ios STATIC
     AzaharBridge/applets_ios.mm
 )
 
+# ---------------------------------------------------------------------------
+# Build identity - the exact git commit/branch/date the app was built from,
+# embedded at configure time (no build-time codegen, so there is nothing for the
+# Xcode generator to mis-order). CI passes the exact values via
+# -DAZAHAR_BUILD_COMMIT/-DAZAHAR_BUILD_BRANCH/-DAZAHAR_BUILD_DATE (see
+# .github/workflows/ios27.yml); local builds fall back to `git` if available.
+# The generated header is only #included by ios_bridge.mm - it is never compiled
+# directly, so this is safe with any generator.
+# ---------------------------------------------------------------------------
+find_package(Git QUIET)
+set(AZAHAR_BUILD_COMMIT "" CACHE STRING "Git commit this iOS build was made from (set by CI)")
+set(AZAHAR_BUILD_BRANCH "" CACHE STRING "Git branch this iOS build was made from (set by CI)")
+set(AZAHAR_BUILD_DATE "" CACHE STRING "Git commit date of this iOS build (set by CI)")
+
+if(AZAHAR_BUILD_COMMIT STREQUAL "" AND GIT_EXECUTABLE)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --short HEAD
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE AZAHAR_BUILD_COMMIT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+endif()
+if(AZAHAR_BUILD_BRANCH STREQUAL "" AND GIT_EXECUTABLE)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" rev-parse --abbrev-ref HEAD
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE AZAHAR_BUILD_BRANCH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+endif()
+if(AZAHAR_BUILD_DATE STREQUAL "" AND GIT_EXECUTABLE)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" log -1 --format=%cI
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        OUTPUT_VARIABLE AZAHAR_BUILD_DATE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+endif()
+
+if(AZAHAR_BUILD_COMMIT STREQUAL "")
+    set(AZAHAR_BUILD_COMMIT "unknown")
+endif()
+if(AZAHAR_BUILD_BRANCH STREQUAL "")
+    set(AZAHAR_BUILD_BRANCH "unknown")
+endif()
+if(AZAHAR_BUILD_DATE STREQUAL "")
+    string(TIMESTAMP AZAHAR_BUILD_DATE UTC)
+endif()
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/AzaharBridge/azahar_build_info.h.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/AzaharBridge/azahar_build_info.h"
+    @ONLY)
+
+set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/AzaharBridge/azahar_build_info.h"
+    PROPERTIES GENERATED TRUE)
+
 target_include_directories(azahar_ios PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_SOURCE_DIR}/src
 )
 

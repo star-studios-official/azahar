@@ -44,6 +44,9 @@
 #include "core/savestate.h"
 #include "core/system_titles.h"
 #include "ios/AzaharBridge/EmuWindowIOS.h"
+// Generated at configure time into ${CMAKE_CURRENT_BINARY_DIR}/AzaharBridge/ (see
+// src/ios/CMakeLists.txt) - included relative to that build-dir include root.
+#include "AzaharBridge/azahar_build_info.h"
 #include "ios/AzaharBridge/config_ios.h"
 #include "ios/AzaharBridge/input_manager_ios.h"
 #include "ios/AzaharBridge/logging_ios.h"
@@ -185,7 +188,12 @@ void az_reload_settings(void) {
 }
 
 void az_log_device_info(void) {
+    // g_scm_rev/g_scm_branch come from scm_rev.cpp (configure-time, may be stale on
+    // incremental local builds). AZAHAR_BUILD_* are also configure-time but CI passes
+    // the exact commit via -DAZAHAR_BUILD_COMMIT, so in CI builds the two always match.
     LOG_INFO(Frontend, "Azahar iOS build: {} {}", Common::g_scm_rev, Common::g_scm_branch);
+    LOG_INFO(Frontend, "Build commit: {} ({}, {})", AZAHAR_BUILD_COMMIT, AZAHAR_BUILD_BRANCH,
+             AZAHAR_BUILD_DATE);
     LOG_INFO(Frontend, "CPU: {}", Common::GetCPUCaps().cpu_string);
 }
 

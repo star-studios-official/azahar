@@ -41,6 +41,11 @@ jobs:
 
       - name: Configure CMake
         run: |
+          # Embed the exact git commit/branch/date this build was made from, so the
+          # in-app log always identifies the build (see az_log_device_info in
+          # src/ios/AzaharBridge/ios_bridge.mm). GITHUB_SHA is the full hash; use the
+          # short form to match scm_rev and the local-build fallback in CMakeLists.
+          BUILD_DATE=$(git log -1 --format=%cI 2>/dev/null || echo "unknown")
           cmake -S . -B build-ios -G Xcode \
             -DCMAKE_SYSTEM_NAME=iOS \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=18.0 \
@@ -49,7 +54,10 @@ jobs:
             -DENABLE_LIBRETRO=OFF \
             -DENABLE_TESTS=OFF \
             -DENABLE_ROOM_STANDALONE=OFF \
-            -DENABLE_RETRO_ACHIEVEMENTS=ON
+            -DENABLE_RETRO_ACHIEVEMENTS=ON \
+            -DAZAHAR_BUILD_COMMIT=${GITHUB_SHA:0:10} \
+            -DAZAHAR_BUILD_BRANCH=${{ github.ref_name }} \
+            -DAZAHAR_BUILD_DATE="$BUILD_DATE"
 
       - name: Build
         run: cmake --build build-ios --config Release -j$(sysctl -n hw.ncpu)
