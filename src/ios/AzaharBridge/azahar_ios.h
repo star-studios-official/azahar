@@ -174,6 +174,13 @@ void az_shutdown_network(void);
 /// Re-reads config.ini and applies settings to the running core if powered on.
 void az_reload_settings(void);
 
+/// Fresh git info regenerated at every build (see CMakeModules/GenerateIOSBuildInfo.cmake).
+namespace Azahar {
+const char* GetIOSBuildCommit();
+const char* GetIOSBuildBranch();
+const char* GetIOSBuildDate();
+} // namespace Azahar
+
 void az_log_device_info(void);
 void az_set_portrait_mode(bool portrait);
 

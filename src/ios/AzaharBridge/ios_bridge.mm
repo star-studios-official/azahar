@@ -185,7 +185,12 @@ void az_reload_settings(void) {
 }
 
 void az_log_device_info(void) {
+    // g_scm_rev/g_scm_branch come from scm_rev.cpp which is generated once at CMake configure
+    // time and can be stale on incremental builds. The Azahar::* values are regenerated on
+    // every build, so when the two disagree the scm_rev values are outdated.
     LOG_INFO(Frontend, "Azahar iOS build: {} {}", Common::g_scm_rev, Common::g_scm_branch);
+    LOG_INFO(Frontend, "Build commit: {} ({}, {})", Azahar::GetIOSBuildCommit(),
+             Azahar::GetIOSBuildBranch(), Azahar::GetIOSBuildDate());
     LOG_INFO(Frontend, "CPU: {}", Common::GetCPUCaps().cpu_string);
 }
 
@@ -1473,6 +1478,22 @@ void az_init_system_save_data(void) {
         // 0x00010038 = ACT (NNID account) save data. The ACT module
         // self-initializes its save data on first boot (AccountManager creates
         // the KVS text files itself), so there is nothing to pre-create here.
+
+        // 0x00010032 = Friends / FRD save data. The Friends module opens this
+        // archive at boot and formats it if missing, but when it is loaded as an
+        // LLE module it expects the archive to already exist; pre-create the
+        // directory plus a zeroed config file so the module never has to hit the
+        // "archive not found" path.
+        std::string frd_dir = nand_data + "/00010032/00000000";
+        FileUtil::CreateFullPath(frd_dir + "/placeholder");
+        {
+            std::string config_path = frd_dir + "/config";
+            if (!FileUtil::Exists(config_path)) {
+                FileUtil::IOFile f(config_path, "wb");
+                std::vector<u8> zeroes(0x100, 0);
+                f.WriteBytes(zeroes.data(), zeroes.size());
+            }
+        }
 
         // 0x00010026 = CEC / StreetPass save data
         std::string cec_dir = nand_data + "/00010026/00000000/CEC/TMP";

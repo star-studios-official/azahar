@@ -289,9 +289,30 @@ Result HLERequestContext::WriteToOutgoingCommandBuffer(u32_le* dst_cmdbuf,
             IPC::StaticBufferDescInfo target_descriptor{dst_cmdbuf[static_buffer_offset]};
             VAddr target_address = dst_cmdbuf[static_buffer_offset + 1];
 
-            ASSERT_MSG(target_descriptor.size >= data.size(), "Static buffer data is too big");
+            // The client may not have set up a buffer for this id (e.g. after an earlier error), in
+            // which case the static buffer area contains zeros or garbage. On real hardware this
+            // would kernel-panic; instead log and skip so a single misbehaving module cannot take
+            // down the whole emulator.
+            if (target_address == 0 ||
+                !kernel.memory.IsValidVirtualAddress(dst_process, target_address)) {
+                LOG_ERROR(Kernel,
+                          "Reply static buffer target address is invalid: addr={:08X}, "
+                          "buffer_id={}, size={}, dst_process={:08X} - skipping",
+                          target_address, static_cast<u32>(buffer_info.buffer_id), data.size(),
+                          dst_process.process_id);
+                dst_cmdbuf[i++] = 0;
+                break;
+            }
+            if (target_descriptor.size < data.size()) {
+                LOG_ERROR(Kernel,
+                          "Reply static buffer data is too big: target_size={}, data_size={}, "
+                          "buffer_id={}, target_addr={:08X} - truncating",
+                          static_cast<u32>(target_descriptor.size), data.size(),
+                          static_cast<u32>(buffer_info.buffer_id), target_address);
+            }
 
-            kernel.memory.WriteBlock(dst_process, target_address, data.data(), data.size());
+            kernel.memory.WriteBlock(dst_process, target_address, data.data(),
+                                     std::min<std::size_t>(target_descriptor.size, data.size()));
 
             dst_cmdbuf[i++] = target_address;
             break;

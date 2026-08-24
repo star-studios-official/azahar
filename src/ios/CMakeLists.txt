@@ -17,7 +17,25 @@ endif()
 # azahar_ios — the C++/ObjC++ bridge (equivalent to citra-android)
 # ---------------------------------------------------------------------------
 
+# Fresh git build info, regenerated on every build so the log always shows the exact
+# commit/date the app was built from (scm_rev.cpp is produced at configure time and can
+# go stale on incremental builds).
+find_package(Git QUIET)
+set(IOS_BUILD_INFO_SRC "${CMAKE_CURRENT_BINARY_DIR}/ios_build_info.cpp")
+add_custom_command(
+    OUTPUT "${IOS_BUILD_INFO_SRC}"
+    COMMAND "${CMAKE_COMMAND}"
+            -DOUTPUT="${IOS_BUILD_INFO_SRC}"
+            -DGIT_EXECUTABLE="${GIT_EXECUTABLE}"
+            -DCMAKE_CURRENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+            -P "${CMAKE_SOURCE_DIR}/CMakeModules/GenerateIOSBuildInfo.cmake"
+    DEPENDS "${CMAKE_SOURCE_DIR}/CMakeModules/GenerateIOSBuildInfo.cmake"
+    COMMENT "Generating iOS build info (git commit/date)"
+    VERBATIM)
+set_source_files_properties("${IOS_BUILD_INFO_SRC}" PROPERTIES GENERATED TRUE)
+
 add_library(azahar_ios STATIC
+    "${IOS_BUILD_INFO_SRC}"
     AzaharBridge/ios_bridge.mm
     AzaharBridge/EmuWindowIOS.h
     AzaharBridge/EmuWindowIOS.mm

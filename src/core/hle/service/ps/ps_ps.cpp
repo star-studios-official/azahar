@@ -147,6 +147,19 @@ void PS_PS::EncryptDecryptAes(Kernel::HLERequestContext& ctx) {
     rb.PushMappedBuffer(destination);
 }
 
+void PS_PS::SeedRNG(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+
+    // On hardware this seeds the PS module's PRNG with data derived from
+    // svcGetSystemTick and forwards it to process9 (PSPXI:SeedRNG). We don't
+    // emulate the hardware RNG engine, so there is nothing to do besides
+    // acknowledging the call.
+    LOG_DEBUG(Service_PS, "called");
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
 void PS_PS::GenerateRandomBytes(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
     const u32 size = rp.Pop<u32>();
@@ -174,7 +187,7 @@ PS_PS::PS_PS() : ServiceFramework("ps:ps", DefaultMaxSessions) {
         {0x0009, nullptr, "GetCTRCardAutoStartupBit"},
         {0x000A, nullptr, "GetLocalFriendCodeSeed"},
         {0x000B, nullptr, "GetDeviceId"},
-        {0x000C, nullptr, "SeedRNG"},
+        {0x000C, &PS_PS::SeedRNG, "SeedRNG"},
         {0x000D, &PS_PS::GenerateRandomBytes, "GenerateRandomBytes"},
         {0x000E, nullptr, "InterfaceForPXI_0x04010084"},
         {0x000F, nullptr, "InterfaceForPXI_0x04020082"},

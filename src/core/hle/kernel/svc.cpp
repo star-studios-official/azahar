@@ -967,9 +967,8 @@ static Result ReceiveIPCRequest(Kernel::KernelSystem& kernel, Memory::MemorySyst
 
         server_session->currently_handling->ResumeFromWait();
         server_session->currently_handling = nullptr;
-
-        // TODO(Subv): This path should try to wait again on the same objects.
-        ASSERT_MSG(false, "ReplyAndReceive translation error behavior unimplemented");
+        LOG_ERROR(Kernel, "Request translation failed (result={:08X}); resuming client with error",
+                  translation_result.raw);
     }
 
     return translation_result;
@@ -1024,9 +1023,16 @@ Result SVC::ReplyAndReceive(s32* index, VAddr handles_address, s32 handle_count,
             kernel, memory, SharedFrom(thread), request_thread, source_address, target_address,
             session->mapped_buffer_context, true);
 
-        // Note: The real kernel seems to always panic if the Server->Client buffer translation
-        // fails for whatever reason.
-        ASSERT(translation_result.IsSuccess());
+        // Note: On real hardware the kernel always panics if the Server->Client buffer
+        // translation fails, taking the whole console down with it. For an emulator a hard
+        // crash (black screen) is far worse than a single misbehaving module, so log the
+        // failure and resume the client with the error instead.
+        if (translation_result.IsError()) {
+            LOG_ERROR(Kernel,
+                      "Failed to translate reply (result={:08X}); resuming client with error",
+                      translation_result.raw);
+            request_thread->SetWaitSynchronizationResult(translation_result);
+        }
 
         // Note: The scheduler is not invoked here.
         request_thread->ResumeFromWait();
