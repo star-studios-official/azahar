@@ -107,16 +107,29 @@ struct GameListView: View {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button {
+                                    appState.launchGame(game)
+                                } label: {
+                                    Label("Play", systemImage: "play.fill")
+                                }
+
+                                if game.isGameCardEligible {
+                                    Button {
+                                        let success = az_insert_cartridge(game.path)
+                                        if !success {
+                                            AppLogger.error("Game Card", message: "Failed to insert game card: \(game.title)")
+                                        } else {
+                                            AppLogger.info("Game Card", details: "Inserted \(game.title) as game card")
+                                        }
+                                    } label: {
+                                        Label("Load as Game Card", systemImage: "internaldrive.fill")
+                                    }
+                                }
+
+                                Button {
                                     selectedGameForProperties = game
                                     showingProperties = true
                                 } label: {
                                     Label("Properties", systemImage: "info.circle")
-                                }
-                                
-                                Button {
-                                    appState.launchGame(game)
-                                } label: {
-                                    Label("Play", systemImage: "play.fill")
                                 }
                             }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {

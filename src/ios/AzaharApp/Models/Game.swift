@@ -34,6 +34,12 @@ struct Game: Identifiable, Hashable {
             return "<1m"
         }
     }
+
+    /// Whether this game can be inserted as a virtual game card (.3ds / .cci)
+    var isGameCardEligible: Bool {
+        let ext = (path as NSString).pathExtension.lowercased()
+        return ext == "3ds" || ext == "cci" || ext == "z3ds" || ext == "zcci"
+    }
 }
 
 /// Scans the user directory for game files.

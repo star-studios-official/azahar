@@ -2421,3 +2421,38 @@ void az_nwm_connect_to_peer_by_name(const char* peer_name) {
     }
 }
 } // namespace Service::NWM
+
+// ---------------------------------------------------------------------------
+// Game card emulation
+// ---------------------------------------------------------------------------
+
+bool az_insert_cartridge(const char* path) {
+    if (!path || !*path) {
+        LOG_ERROR(Frontend, "az_insert_cartridge: null or empty path");
+        return false;
+    }
+
+    const std::string filepath(path);
+    LOG_INFO(Frontend, "az_insert_cartridge: attempting to insert {}", filepath);
+
+    auto& system = Core::System::GetInstance();
+    system.InsertCartridge(filepath);
+
+    const bool success = !system.GetCartridge().empty();
+    if (success) {
+        LOG_INFO(Frontend, "az_insert_cartridge: successfully inserted {}", filepath);
+    } else {
+        LOG_ERROR(Frontend, "az_insert_cartridge: failed to insert {} (not a valid NCSD/CCI/3DS)",
+                  filepath);
+    }
+    return success;
+}
+
+void az_eject_cartridge(void) {
+    LOG_INFO(Frontend, "az_eject_cartridge");
+    Core::System::GetInstance().EjectCartridge();
+}
+
+bool az_is_cartridge_inserted(void) {
+    return !Core::System::GetInstance().GetCartridge().empty();
+}

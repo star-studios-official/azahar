@@ -44,6 +44,7 @@
 #include "core/hle/service/nfc/nfc.h"
 #include "core/hle/service/nim/nim.h"
 #include "core/hle/service/nwm/nwm.h"
+#include "core/hle/service/hbloader/hbldr.h"
 #include "core/hle/service/plgldr/plgldr.h"
 #include "core/hle/service/pm/pm.h"
 #include "core/hle/service/ps/ps_ps.h"
@@ -59,7 +60,7 @@
 
 namespace Service {
 
-const std::array<ServiceModuleInfo, 41> service_module_map{
+const std::array<ServiceModuleInfo, 42> service_module_map{
     {{"FS", 0x00040130'00001102, FS::InstallInterfaces, false},
      {"PM", 0x00040130'00001202, PM::InstallInterfaces, false},
      {"LDR", 0x00040130'00003702, LDR::InstallInterfaces, false},
@@ -95,11 +96,12 @@ const std::array<ServiceModuleInfo, 41> service_module_map{
      {"PTM", 0x00040130'00002202, PTM::InstallInterfaces, false},
      {"QTM", 0x00040130'00004202, QTM::InstallInterfaces, false},
      {"CSND", 0x00040130'00002702, CSND::InstallInterfaces, false},
-     {"HTTP", 0x00040130'00002902, HTTP::InstallInterfaces, false},
-     {"SOC", 0x00040130'00002E02, SOC::InstallInterfaces, false},
-     {"SSL", 0x00040130'00002F02, SSL::InstallInterfaces, false},
+     {"HTTP", 0x00040130'00002902, HTTP::InstallInterfaces, true},
+     {"SOC", 0x00040130'00002E02, SOC::InstallInterfaces, true},
+     {"SSL", 0x00040130'00002F02, SSL::InstallInterfaces, true},
      {"PS", 0x00040130'00003102, PS::InstallInterfaces, false},
      {"PLGLDR", 0x00040130'00006902, PLGLDR::InstallInterfaces, false},
+     {"HBLDR", 0, HBLDR::InstallInterfaces, false},
      {"MCU", 0x00040130'00001F02, MCU::InstallInterfaces, false},
      // no HLE implementation
      {"CDC", 0x00040130'00001802, nullptr, false},

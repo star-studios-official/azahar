@@ -410,6 +410,8 @@ add_library(citra_core STATIC EXCLUDE_FROM_ALL
     hle/service/nwm/uds_connection.h
     hle/service/nwm/uds_data.cpp
     hle/service/nwm/uds_data.h
+    hle/service/hbloader/hbldr.cpp
+    hle/service/hbloader/hbldr.h
     hle/service/plgldr/plgldr.cpp
     hle/service/plgldr/plgldr.h
     hle/service/pm/pm.cpp

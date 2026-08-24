@@ -686,6 +686,20 @@ void az_nwm_peer_connected(const char* peer_name);
 void az_nwm_peer_disconnected(const char* peer_name);
 void az_nwm_receive_packet(const void* data, size_t length);
 
+// ---------------------------------------------------------------------------
+// Game card emulation
+// ---------------------------------------------------------------------------
+
+/// Inserts a .3ds/.cci file as a virtual game card. The file must be NCSD format.
+/// Returns true on success, false if the file is not a valid game card image.
+bool az_insert_cartridge(const char* path);
+
+/// Ejects the virtual game card.
+void az_eject_cartridge(void);
+
+/// Returns true if a virtual game card is currently inserted.
+bool az_is_cartridge_inserted(void);
+
 #ifdef __cplusplus
 }
 #endif
