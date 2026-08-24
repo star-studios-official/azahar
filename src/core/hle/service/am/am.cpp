@@ -22,6 +22,7 @@
 #include "core/file_sys/certificate.h"
 #include "core/file_sys/errors.h"
 #include "core/file_sys/ncch_container.h"
+#include "core/file_sys/nds_rom.h"
 #include "core/file_sys/otp.h"
 #include "core/file_sys/seed_db.h"
 #include "core/file_sys/title_metadata.h"
@@ -1457,6 +1458,15 @@ void Module::ScanForTitlesImpl(Service::FS::MediaType media_type) {
             Loader::ResultStatus res = cartridge_ncch.ReadProgramId(program_id);
             if (res == Loader::ResultStatus::Success) {
                 am_title_list[static_cast<u32>(media_type)].push_back(program_id);
+            } else if (FileSys::IsNDSROM(cartridge)) {
+                // TWL (DS/DSi) ROM - generate synthetic title ID from game code
+                FileSys::NDSROMHeader nds_header{};
+                if (FileSys::ReadNDSROMHeader(cartridge, nds_header)) {
+                    program_id = FileSys::GetNDSSyntheticTitleID(nds_header);
+                    am_title_list[static_cast<u32>(media_type)].push_back(program_id);
+                    LOG_INFO(Service_AM, "TWL ROM detected: title_id={:016X}, game='{}'",
+                             program_id, FileSys::GetNDSGameTitle(nds_header));
+                }
             }
         }
     } else {

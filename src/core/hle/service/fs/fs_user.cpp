@@ -17,6 +17,7 @@
 #include "core/core.h"
 #include "core/file_sys/errors.h"
 #include "core/file_sys/ncch_container.h"
+#include "core/file_sys/nds_rom.h"
 #include "core/file_sys/seed_db.h"
 #include "core/hle/ipc.h"
 #include "core/hle/ipc_helpers.h"
@@ -931,8 +932,14 @@ void FS_USER::GetCardType(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
     rb.Push(ResultSuccess);
-    rb.Push(0); // CTR Card
-    LOG_DEBUG(Service_FS, "(STUBBED) called");
+
+    const auto& cartridge = system.GetCartridge();
+    u8 card_type = 0; // CTR Card (3DS)
+    if (!cartridge.empty() && FileSys::IsNDSROM(cartridge)) {
+        card_type = 1; // TWL Card (DS/DSi)
+    }
+    rb.Push(card_type);
+    LOG_DEBUG(Service_FS, "called, card_type={}", card_type);
 }
 
 void FS_USER::GetSdmcArchiveResource(Kernel::HLERequestContext& ctx) {

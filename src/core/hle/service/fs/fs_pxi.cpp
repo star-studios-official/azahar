@@ -15,6 +15,7 @@
 #include "core/file_sys/directory_backend.h"
 #include "core/file_sys/errors.h"
 #include "core/file_sys/file_backend.h"
+#include "core/file_sys/nds_rom.h"
 #include "core/hle/ipc_helpers.h"
 #include "core/hle/kernel/process.h"
 #include "core/hle/kernel/thread.h"
@@ -515,7 +516,13 @@ void FS_PXI::GetCardType(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
     rb.Push(ResultSuccess);
-    rb.Push(0); // CTR Card
+
+    const auto& cartridge = system.GetCartridge();
+    u8 card_type = 0; // CTR Card (3DS)
+    if (!cartridge.empty() && FileSys::IsNDSROM(cartridge)) {
+        card_type = 1; // TWL Card (DS/DSi)
+    }
+    rb.Push(card_type);
 }
 
 void FS_PXI::GetSdmcArchiveResource(Kernel::HLERequestContext& ctx) {
