@@ -158,15 +158,6 @@ private:
     friend class boost::serialization::access;
 };
 
-private:
-    [[maybe_unused]]
-    Core::System& system;
-
-    template <class Archive>
-    void serialize(Archive& ar, const unsigned int);
-    friend class boost::serialization::access;
-};
-
 void InstallInterfaces(Core::System& system);
 
 } // namespace Service::ACT
