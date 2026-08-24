@@ -4,8 +4,10 @@
 
 #pragma once
 
+#include <array>
 #include <memory>
 #include "common/common_types.h"
+#include "core/hle/result.h"
 #include "core/hle/service/service.h"
 
 namespace Core {
@@ -17,6 +19,11 @@ class Event;
 }
 
 namespace Service::FRD {
+
+/// FPD::LocalAccountNotExists, returned by FRDA::LoadLocalAccount when the given
+/// friends local account has not been created yet (Nimbus relies on this to decide
+/// when to create a new Pretendo account).
+constexpr Result ResultFPDLocalAccountNotExists(0xC880C4ED);
 
 struct FriendKey {
     u32 friend_id;
@@ -267,6 +274,36 @@ public:
          */
         void GetLastResponseResult(Kernel::HLERequestContext& ctx);
 
+        // frd:a only commands (see 3dbrew FRDA:* pages)
+
+        /**
+         * FRDA::CreateLocalAccount service function
+         *  Inputs:
+         *      1 : Local account ID
+         *      2 : NASC environment
+         *      3 : NFS type
+         *      4 : NFS number
+         *  Outputs:
+         *      1 : Result of function, 0 on success, otherwise error code
+         */
+        void CreateLocalAccount(Kernel::HLERequestContext& ctx);
+
+        /**
+         * FRDA::LoadLocalAccount service function
+         *  Inputs:
+         *      1 : Local account ID
+         *  Outputs:
+         *      1 : Result of function, 0 on success, otherwise FPD::LocalAccountNotExists
+         */
+        void LoadLocalAccount(Kernel::HLERequestContext& ctx);
+
+        /**
+         * FRDA::UnloadLocalAccount service function
+         *  Outputs:
+         *      1 : Result of function, 0 on success, otherwise error code
+         */
+        void UnloadLocalAccount(Kernel::HLERequestContext& ctx);
+
     protected:
         std::shared_ptr<Module> frd;
     };
@@ -277,6 +314,9 @@ private:
     bool logged_in = false;
     std::shared_ptr<Kernel::Event> login_event;
     Core::TimingEventType* login_delay_event;
+    /// Friends local accounts (IDs 1..6) that have been created via FRDA::CreateLocalAccount.
+    std::array<bool, 7> local_accounts{};
+    u8 loaded_local_account_id = 0;
     Core::System& system;
 
     template <class Archive>
@@ -285,6 +325,8 @@ private:
         ar & my_friend_key;
         ar & my_presence;
         ar & logged_in;
+        ar & local_accounts;
+        ar & loaded_local_account_id;
     }
     friend class boost::serialization::access;
 };

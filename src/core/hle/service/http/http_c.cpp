@@ -687,6 +687,104 @@ void HTTP_C::SetProxyDefault(Kernel::HLERequestContext& ctx) {
     rb.Push(ResultSuccess);
 }
 
+void HTTP_C::SetProxy(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const Context::Handle context_handle = rp.Pop<u32>();
+    const u32 proxy_length = rp.Pop<u32>();
+    const u16 port = rp.Pop<u16>();
+    [[maybe_unused]] const u32 username_length = rp.Pop<u32>();
+    [[maybe_unused]] const u32 password_length = rp.Pop<u32>();
+    const std::vector<u8> proxy_buffer = rp.PopStaticBuffer();
+    const std::vector<u8> username_buffer = rp.PopStaticBuffer();
+    const std::vector<u8> password_buffer = rp.PopStaticBuffer();
+
+    // The buffers include the NUL terminator.
+    auto ToString = [](const std::vector<u8>& buf) {
+        return buf.empty() ? std::string{} : std::string(buf.begin(), buf.end() - 1);
+    };
+
+    if (!PerformStateChecks(ctx, rp, context_handle)) {
+        return;
+    }
+
+    Context& http_context = GetContext(context_handle);
+    Context::Proxy proxy;
+    proxy.url = ToString(proxy_buffer);
+    proxy.username = ToString(username_buffer);
+    proxy.password = ToString(password_buffer);
+    proxy.port = port;
+    http_context.proxy = proxy;
+
+    LOG_DEBUG(Service_HTTP, "called, handle={}, proxy={}, port={}", context_handle, proxy.url, port);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
+void HTTP_C::SetBasicAuthorization(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const Context::Handle context_handle = rp.Pop<u32>();
+    const u32 username_length = rp.Pop<u32>();
+    const u32 password_length = rp.Pop<u32>();
+    const std::vector<u8> username_buffer = rp.PopStaticBuffer();
+    const std::vector<u8> password_buffer = rp.PopStaticBuffer();
+
+    auto ToString = [](const std::vector<u8>& buf) {
+        return buf.empty() ? std::string{} : std::string(buf.begin(), buf.end() - 1);
+    };
+
+    if (!PerformStateChecks(ctx, rp, context_handle)) {
+        return;
+    }
+
+    Context& http_context = GetContext(context_handle);
+    Context::BasicAuth auth;
+    auth.username = ToString(username_buffer);
+    auth.password = ToString(password_buffer);
+    http_context.basic_auth = auth;
+
+    LOG_DEBUG(Service_HTTP, "called, handle={}, username_length={}, password_length={}",
+              context_handle, username_length, password_length);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
+void HTTP_C::SetSocketBufferSize(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const Context::Handle context_handle = rp.Pop<u32>();
+    const u32 buffer_size = rp.Pop<u32>();
+
+    if (!PerformStateChecks(ctx, rp, context_handle)) {
+        return;
+    }
+
+    Context& http_context = GetContext(context_handle);
+    http_context.socket_buffer_size = buffer_size;
+
+    LOG_DEBUG(Service_HTTP, "called, handle={}, buffer_size={}", context_handle, buffer_size);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
+void HTTP_C::GetRequestError(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const Context::Handle context_handle = rp.Pop<u32>();
+
+    if (!PerformStateChecks(ctx, rp, context_handle)) {
+        return;
+    }
+
+    // The HLE HTTP implementation does not retain per-request error codes; report
+    // "no error" (0). Callers treat non-zero values as HTTP-module error codes.
+    LOG_DEBUG(Service_HTTP, "called, handle={}", context_handle);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
+    rb.Push(ResultSuccess);
+    rb.Push(0);
+}
+
 void HTTP_C::CreateContext(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
     const u32 url_size = rp.Pop<u32>();
@@ -1836,6 +1934,24 @@ void HTTP_C::SetSSLOpt(Kernel::HLERequestContext& ctx) {
     rb.Push(ResultSuccess);
 }
 
+void HTTP_C::SetSSLClearOpt(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const Context::Handle context_handle = rp.Pop<u32>();
+    const u32 bitmask = rp.Pop<u32>();
+
+    if (!PerformStateChecks(ctx, rp, context_handle)) {
+        return;
+    }
+
+    Context& http_context = GetContext(context_handle);
+    http_context.ssl_config.options &= ~bitmask;
+
+    LOG_DEBUG(Service_HTTP, "called, handle={}, bitmask={:#x}", context_handle, bitmask);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
 void HTTP_C::OpenClientCertContext(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
     u32 cert_size = rp.Pop<u32>();
@@ -2096,6 +2212,34 @@ void HTTP_C::UnregisterURLReplacement(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(res);
+}
+
+void HTTP_C::SetDefaultProxy(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const Context::Handle context_handle = rp.Pop<u32>();
+
+    if (!PerformStateChecks(ctx, rp, context_handle)) {
+        return;
+    }
+
+    Context& http_context = GetContext(context_handle);
+    http_context.proxy.reset();
+
+    LOG_DEBUG(Service_HTTP, "called, handle={}", context_handle);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
+void HTTP_C::ClearDNSCache(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+
+    // The HLE HTTP implementation resolves hostnames through the host OS, so there is no
+    // DNS cache to clear.
+    LOG_DEBUG(Service_HTTP, "called");
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
 }
 
 void HTTP_C::GetDownloadSizeState(Kernel::HLERequestContext& ctx) {
@@ -2365,16 +2509,16 @@ HTTP_C::HTTP_C() : ServiceFramework("http:C", 32) {
         {0x0004, &HTTP_C::CancelConnection, "CancelConnection"},
         {0x0005, &HTTP_C::GetRequestState, "GetRequestState"},
         {0x0006, &HTTP_C::GetDownloadSizeState, "GetDownloadSizeState"},
-        {0x0007, nullptr, "GetRequestError"},
+        {0x0007, &HTTP_C::GetRequestError, "GetRequestError"},
         {0x0008, &HTTP_C::InitializeConnectionSession, "InitializeConnectionSession"},
         {0x0009, &HTTP_C::BeginRequest, "BeginRequest"},
         {0x000A, &HTTP_C::BeginRequestAsync, "BeginRequestAsync"},
         {0x000B, &HTTP_C::ReceiveData, "ReceiveData"},
         {0x000C, &HTTP_C::ReceiveDataTimeout, "ReceiveDataTimeout"},
-        {0x000D, nullptr, "SetProxy"},
+        {0x000D, &HTTP_C::SetProxy, "SetProxy"},
         {0x000E, &HTTP_C::SetProxyDefault, "SetProxyDefault"},
-        {0x000F, nullptr, "SetBasicAuthorization"},
-        {0x0010, nullptr, "SetSocketBufferSize"},
+        {0x000F, &HTTP_C::SetBasicAuthorization, "SetBasicAuthorization"},
+        {0x0010, &HTTP_C::SetSocketBufferSize, "SetSocketBufferSize"},
         {0x0011, &HTTP_C::AddRequestHeader, "AddRequestHeader"},
         {0x0012, &HTTP_C::AddPostDataAscii, "AddPostDataAscii"},
         {0x0013, &HTTP_C::AddPostDataBinary, "AddPostDataBinary"},
@@ -2402,7 +2546,7 @@ HTTP_C::HTTP_C() : ServiceFramework("http:C", 32) {
         {0x0029, &HTTP_C::SetClientCertContext, "SetClientCertContext"},
         {0x002A, &HTTP_C::GetSSLError, "GetSSLError"},
         {0x002B, &HTTP_C::SetSSLOpt, "SetSSLOpt"},
-        {0x002C, nullptr, "SetSSLClearOpt"},
+        {0x002C, &HTTP_C::SetSSLClearOpt, "SetSSLClearOpt"},
         {0x002D, &HTTP_C::CreateRootCertChain, "CreateRootCertChain"},
         {0x002E, &HTTP_C::DestroyRootCertChain, "DestroyRootCertChain"},
         {0x002F, &HTTP_C::RootCertChainAddCert, "RootCertChainAddCert"},
@@ -2411,8 +2555,8 @@ HTTP_C::HTTP_C() : ServiceFramework("http:C", 32) {
         {0x0032, &HTTP_C::OpenClientCertContext, "OpenClientCertContext"},
         {0x0033, &HTTP_C::OpenDefaultClientCertContext, "OpenDefaultClientCertContext"},
         {0x0034, &HTTP_C::CloseClientCertContext, "CloseClientCertContext"},
-        {0x0035, nullptr, "SetDefaultProxy"},
-        {0x0036, nullptr, "ClearDNSCache"},
+        {0x0035, &HTTP_C::SetDefaultProxy, "SetDefaultProxy"},
+        {0x0036, &HTTP_C::ClearDNSCache, "ClearDNSCache"},
         {0x0037, &HTTP_C::SetKeepAlive, "SetKeepAlive"},
         {0x0038, &HTTP_C::SetPostDataTypeSize, "SetPostDataTypeSize"},
         {0x0039, &HTTP_C::Finalize, "Finalize"},

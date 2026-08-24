@@ -469,6 +469,55 @@ private:
     void SetProxyDefault(Kernel::HLERequestContext& ctx);
 
     /**
+     * HTTP_C::SetProxy service function
+     *  Inputs:
+     *      1 : Context handle
+     *      2 : Proxy length
+     *      3 : u16 port
+     *      4 : Username length
+     *      5 : Password length
+     *  6-7 : (Static buffer) Proxy
+     *  8-9 : (Static buffer) Username
+     * 10-11 : (Static buffer) Password
+     *  Outputs:
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void SetProxy(Kernel::HLERequestContext& ctx);
+
+    /**
+     * HTTP_C::SetBasicAuthorization service function
+     *  Inputs:
+     *      1 : Context handle
+     *      2 : Username length
+     *      3 : Password length
+     *  4-5 : (Static buffer) Username
+     *  6-7 : (Static buffer) Password
+     *  Outputs:
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void SetBasicAuthorization(Kernel::HLERequestContext& ctx);
+
+    /**
+     * HTTP_C::SetSocketBufferSize service function
+     *  Inputs:
+     *      1 : Context handle
+     *      2 : u32 value
+     *  Outputs:
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void SetSocketBufferSize(Kernel::HLERequestContext& ctx);
+
+    /**
+     * HTTP_C::GetRequestError service function
+     *  Inputs:
+     *      1 : Context handle
+     *  Outputs:
+     *      1 : Result of function, 0 on success, otherwise error code
+     *      2 : Error code
+     */
+    void GetRequestError(Kernel::HLERequestContext& ctx);
+
+    /**
      * HTTP_C::ReceiveData service function
      *  Inputs:
      *      1 : Context handle
@@ -884,6 +933,16 @@ private:
     void SetSSLOpt(Kernel::HLERequestContext& ctx);
 
     /**
+     * HTTP_C::SetSSLClearOpt service function
+     *  Inputs:
+     *      1 : Context handle
+     *      2 : u32 bitmask
+     *  Outputs:
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void SetSSLClearOpt(Kernel::HLERequestContext& ctx);
+
+    /**
      * HTTP_C::OpenClientCertContext service function
      *  Inputs:
      *      1 :  Cert size
@@ -947,6 +1006,22 @@ private:
     void RegisterURLReplacement(Kernel::HLERequestContext& ctx);
 
     void UnregisterURLReplacement(Kernel::HLERequestContext& ctx);
+
+    /**
+     * HTTP_C::SetDefaultProxy service function
+     *  Inputs:
+     *      1 : Context handle
+     *  Outputs:
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void SetDefaultProxy(Kernel::HLERequestContext& ctx);
+
+    /**
+     * HTTP_C::ClearDNSCache service function
+     *  Outputs:
+     *      1 : Result of function, 0 on success, otherwise error code
+     */
+    void ClearDNSCache(Kernel::HLERequestContext& ctx);
 
     [[nodiscard]] SessionData* EnsureSessionInitialized(Kernel::HLERequestContext& ctx,
                                                         IPC::RequestParser rp);

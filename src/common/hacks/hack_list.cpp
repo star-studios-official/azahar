@@ -81,7 +81,11 @@ HackManager hack_manager = {
 
         {HackType::ONLINE_LLE_REQUIRED,
          HackEntry{
-             .mode = HackAllowMode::FORCE,
+             // ALLOW instead of FORCE: the online-LLE HLE implementations (ACT, CECD, FRD,
+             // NIM, HTTP, SOC, SSL) now cover what these titles actually call, so respect the
+             // user's "Enable required LLE modules for online features" setting instead of
+             // always forcing the 8 LLE modules on (which broke Home Menu boot).
+             .mode = HackAllowMode::ALLOW,
              .affected_title_ids =
                  {
                      // eShop

@@ -301,6 +301,55 @@ void Module::Interface::GetLastResponseResult(Kernel::HLERequestContext& ctx) {
     rb.Push(ResultSuccess);
 }
 
+void Module::Interface::CreateLocalAccount(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const auto local_account_id = rp.Pop<u8>();
+    const auto nasc_environment = rp.Pop<u8>();
+    const auto nfs_type = rp.Pop<u8>();
+    const auto nfs_no = rp.Pop<u8>();
+
+    LOG_INFO(Service_FRD, "CreateLocalAccount: id={}, nasc_environment={}, nfs_type={}, nfs_no={}",
+             local_account_id, nasc_environment, nfs_type, nfs_no);
+
+    if (local_account_id >= 1 && local_account_id < frd->local_accounts.size()) {
+        frd->local_accounts[local_account_id] = true;
+    }
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
+void Module::Interface::LoadLocalAccount(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const auto local_account_id = rp.Pop<u8>();
+
+    Result result = ResultSuccess;
+    if (local_account_id >= frd->local_accounts.size() ||
+        !frd->local_accounts[local_account_id]) {
+        // Not created yet: report FPD::LocalAccountNotExists so the caller (Nimbus)
+        // knows it has to create the account first.
+        result = ResultFPDLocalAccountNotExists;
+    } else {
+        frd->loaded_local_account_id = local_account_id;
+    }
+
+    LOG_INFO(Service_FRD, "LoadLocalAccount: id={}, result={:08X}", local_account_id, result.raw);
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(result);
+}
+
+void Module::Interface::UnloadLocalAccount(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+
+    LOG_INFO(Service_FRD, "UnloadLocalAccount: called");
+    frd->loaded_local_account_id = 0;
+    frd->logged_in = false;
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
 Module::Module(Core::System& system) : system(system) {};
 Module::~Module() = default;
 
