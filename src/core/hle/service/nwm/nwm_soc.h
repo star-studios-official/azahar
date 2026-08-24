@@ -4,7 +4,13 @@
 
 #pragma once
 
+#include <memory>
 #include "core/hle/service/service.h"
+
+namespace Kernel {
+class Event;
+class SharedMemory;
+} // namespace Kernel
 
 namespace Service::NWM {
 
@@ -14,8 +20,13 @@ public:
 
 private:
     void GetMACAddress(Kernel::HLERequestContext& ctx);
+    void GetMbufPoolInformation(Kernel::HLERequestContext& ctx);
 
     Core::System& system;
+
+    // Shared memory for mbuf pool (0x22000 bytes total, 0x40 entries of 0x800 bytes each)
+    std::shared_ptr<Kernel::SharedMemory> mbuf_shared_mem;
+    std::shared_ptr<Kernel::Event> mbuf_event;
 
     SERVICE_SERIALIZATION_SIMPLE
 };
