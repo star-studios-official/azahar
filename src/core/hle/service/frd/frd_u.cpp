@@ -58,7 +58,7 @@ FRD_U::FRD_U(std::shared_ptr<Module> frd) : Module::Interface(std::move(frd), "f
         {0x002D, nullptr, "GetNatProperties"},
         {0x002E, nullptr, "GetServerTimeInterval"},
         {0x002F, nullptr, "AllowHalfAwake"},
-        {0x0030, nullptr, "GetServerTypes"},
+        {0x0030, &FRD_U::GetServerTypes, "GetServerTypes"},
         {0x0031, nullptr, "GetFriendComment"},
         {0x0032, &FRD_U::SetClientSdkVersion, "SetClientSdkVersion"},
         {0x0033, nullptr, "GetMyApproachContext"},

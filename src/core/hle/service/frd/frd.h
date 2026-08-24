@@ -241,6 +241,16 @@ public:
         void IsOnline(Kernel::HLERequestContext& ctx);
 
         /**
+         * FRD::GetServerTypes service function
+         *  Outputs:
+         *      1 : Result of function, 0 on success, otherwise error code
+         *      2 : u8 NASC environment (0: Production, 1: Testing, 2: Development)
+         *      3 : u8 Server type letter value
+         *      4 : u8 Server type number value
+         */
+        void GetServerTypes(Kernel::HLERequestContext& ctx);
+
+        /**
          * FRD::HasLoggedIn service function
          *  Outputs:
          *      1 : Result of function, 0 on success, otherwise error code

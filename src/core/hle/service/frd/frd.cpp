@@ -243,6 +243,26 @@ void Module::Interface::IsOnline(Kernel::HLERequestContext& ctx) {
     LOG_WARNING(Service_FRD, "(STUBBED) called");
 }
 
+void Module::Interface::GetServerTypes(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    IPC::RequestBuilder rb = rp.MakeBuilder(4, 0);
+
+    // Report the NASC environment as Testing so Nimbus/Pretendo clients select the Pretendo
+    // account by default (see nimbus NascEnvironment: 1 = pretendo).
+    constexpr u8 nasc_environment = 1;
+    // Production-style server type letter/number ("L1"). These are only used by the friends
+    // module to build server URLs, which is fully emulated HLE-side, so fixed values are fine.
+    constexpr u8 server_type_letter = 0;
+    constexpr u8 server_type_number = 1;
+
+    rb.Push(ResultSuccess);
+    rb.Push(nasc_environment);
+    rb.Push(server_type_letter);
+    rb.Push(server_type_number);
+
+    LOG_WARNING(Service_FRD, "called, nasc_environment={}", static_cast<u32>(nasc_environment));
+}
+
 void Module::Interface::HasLoggedIn(Kernel::HLERequestContext& ctx) {
     LOG_WARNING(Service_FRD, "(STUBBED) called");
 

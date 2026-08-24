@@ -81,7 +81,10 @@ void NWM_SOC::GetMbufPoolInformation(Kernel::HLERequestContext& ctx) {
     }
 
     IPC::RequestParser rp(ctx);
-    IPC::RequestBuilder rb = rp.MakeBuilder(5, 0);
+    // 2 normal params (result + sharedmem_size) + 3 translate params (one handle descriptor
+    // followed by the shared memory and event handles). The handles must live in the translate
+    // section or the kernel never converts them from the internal indices into real handle values.
+    IPC::RequestBuilder rb = rp.MakeBuilder(2, 3);
     rb.Push(ResultSuccess);
     rb.Push<u32>(MbufPoolSize); // sharedmem_size at cmdreply[2]
     rb.PushCopyObjects(mbuf_shared_mem, mbuf_event);
