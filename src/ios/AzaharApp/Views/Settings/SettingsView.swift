@@ -19,6 +19,9 @@ struct SettingsView: View {
     @AppStorage("last_artic_base_addr") private var lastArticBaseAddr = ""
     @State private var showArticBaseDialog = false
     @State private var articBaseAddress = ""
+    @State private var showingAlert = false
+    @State private var alertTitle = ""
+    @State private var alertMessage = ""
 
     var body: some View {
         NavigationStack {
@@ -553,7 +556,35 @@ struct SettingsView: View {
                         Label("Download System Files", systemImage: "arrow.down.circle")
                     }
                     
+                    Button {
+                        az_generate_console_files(1) // 1 = USA region
+                        showingAlert = true
+                        alertTitle = "Console Files Generated"
+                        alertMessage = "Synthetic console-unique files have been generated (SecureInfo, LFCS, OTP, movable.sed). Nimbus/Pretendo should now be able to use these without a real 3DS."
+                    } label: {
+                        Label("Generate Console Files for Nimbus", systemImage: "wand.and.stars")
+                    }
+                    .alert(alertTitle, isPresented: $showingAlert) {
+                        Button("OK", role: .cancel) {}
+                    } message: {
+                        Text(alertMessage)
+                    }
+                    
+                    if az_is_synthetic_console_data() {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                            Text("Synthetic console data active")
+                                .font(.caption)
+                                .foregroundStyle(.green)
+                        }
+                    }
+                    
                     Text("Install Home Menu, shared fonts, and system archives from your 3DS")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    
+                    Text("Generate Console Files creates synthetic SecureInfo, LFCS, OTP, and movable.sed so Nimbus/Pretendo works without a real 3DS.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -901,6 +901,15 @@ void az_unlink_console(void) {
     HW::UniqueData::UnlinkConsole();
 }
 
+void az_generate_console_files(int region) {
+    LOG_INFO(Core, "Generating synthetic console files for region {}", region);
+    HW::UniqueData::GenerateSyntheticConsoleFiles(static_cast<u8>(region));
+}
+
+bool az_is_synthetic_console_data(void) {
+    return HW::UniqueData::IsSyntheticConsoleData();
+}
+
 // ---------------------------------------------------------------------------
 // Save states / perf / play time
 // ---------------------------------------------------------------------------

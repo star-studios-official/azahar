@@ -259,7 +259,11 @@ Loader::ResultStatus FileSys::Plugin3GXLoader::Map(
     auto vma_exe = process.vm_manager.MapBackingMemory(
         _3GX_exe_load_addr, backing_memory_exe, exe_size,
         is_mem_private ? Kernel::MemoryState::Private : Kernel::MemoryState::Shared);
-    ASSERT(vma_exe.Succeeded());
+    if (!vma_exe.Succeeded()) {
+        LOG_ERROR(Service_PLGLDR, "Failed to map plugin executable at 0x{:08X} (size: 0x{:X})",
+                  _3GX_exe_load_addr, exe_size);
+        return Loader::ResultStatus::Error;
+    }
     process.vm_manager.Reprotect(vma_exe.Unwrap(), Kernel::VMAPermission::ReadWriteExecute);
 
     // Prepare plugin header and write it
@@ -310,7 +314,11 @@ Loader::ResultStatus FileSys::Plugin3GXLoader::Map(
     auto vma_heap = process.vm_manager.MapBackingMemory(
         _3GX_heap_load_addr, backing_memory_heap, heap_size,
         is_mem_private ? Kernel::MemoryState::Private : Kernel::MemoryState::Shared);
-    ASSERT(vma_heap.Succeeded());
+    if (!vma_heap.Succeeded()) {
+        LOG_ERROR(Service_PLGLDR, "Failed to map plugin heap at 0x{:08X} (size: 0x{:X})",
+                  _3GX_heap_load_addr, heap_size);
+        return Loader::ResultStatus::Error;
+    }
     process.vm_manager.Reprotect(vma_heap.Unwrap(), Kernel::VMAPermission::ReadWriteExecute);
 
     kernel.memory.Plugin3GXFramebufferAddress() = Memory::FCRAM_PADDR + fcram_offset + heap_offset;
@@ -424,7 +432,11 @@ void FileSys::Plugin3GXLoader::MapBootloader(Kernel::Process& process, Kernel::K
     auto vma = process.vm_manager.MapBackingMemory(_3GX_exe_load_addr - bootloader_memory_size,
                                                    backing_memory, bootloader_memory_size,
                                                    Kernel::MemoryState::Private);
-    ASSERT(vma.Succeeded());
+    if (!vma.Succeeded()) {
+        LOG_ERROR(Service_PLGLDR, "Failed to map plugin bootloader at 0x{:08X} (size: 0x{:X})",
+                  _3GX_exe_load_addr - bootloader_memory_size, bootloader_memory_size);
+        return;
+    }
     process.vm_manager.Reprotect(vma.Unwrap(), Kernel::VMAPermission::ReadWriteExecute);
 
     // Write bootloader

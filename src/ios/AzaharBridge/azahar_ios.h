@@ -329,6 +329,11 @@ void az_get_are_system_titles_installed(bool* out); // out[0] = old3ds, out[1] =
 void az_uninstall_system_files(bool old3ds);
 bool az_is_full_console_linked(void);
 void az_unlink_console(void);
+/// Generate synthetic console-unique files (SecureInfo, LFCS, OTP, movable.sed)
+/// for Nimbus/Pretendo without needing a real 3DS.
+/// region: 0=JPN, 1=USA, 2=EUR, etc.
+void az_generate_console_files(int region);
+bool az_is_synthetic_console_data(void);
 
 /// Downloads and installs a title from Nintendo Update Service (NUS).
 /// Returns InstallStatus: 0=Success, 1=ErrorFailedToOpenFile, 2=ErrorFileNotFound, 

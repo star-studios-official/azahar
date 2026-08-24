@@ -179,4 +179,13 @@ std::unique_ptr<FileUtil::IOFileBase> OpenUniqueCryptoFile(const std::string& fi
 
 bool IsFullConsoleLinked();
 void UnlinkConsole();
+
+/// Generate synthetic console-unique files (SecureInfo_A, LFCS_B, OTP, movable.sed)
+/// so that Nimbus/Pretendo can work without needing a real 3DS or Artic Setup Tool.
+/// Uses random but consistent data; signatures will be invalid but functional for HLE.
+void GenerateSyntheticConsoleFiles(u8 region = 1);
+
+/// Returns true if the current console data was generated synthetically.
+bool IsSyntheticConsoleData();
+
 } // namespace HW::UniqueData
