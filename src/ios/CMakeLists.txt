@@ -22,14 +22,18 @@ endif()
 # go stale on incremental builds).
 find_package(Git QUIET)
 set(IOS_BUILD_INFO_SRC "${CMAKE_CURRENT_BINARY_DIR}/ios_build_info.cpp")
-add_custom_command(
-    OUTPUT "${IOS_BUILD_INFO_SRC}"
+
+# The Xcode generator does not reliably order an add_custom_command(OUTPUT ...) source
+# ahead of the compile phase, so generate the file from an explicit custom target that
+# azahar_ios depends on. Custom targets without dependencies always re-run, which is
+# exactly what we want here: fresh git info on every build.
+add_custom_target(azahar_ios_build_info
     COMMAND "${CMAKE_COMMAND}"
             -DOUTPUT="${IOS_BUILD_INFO_SRC}"
             -DGIT_EXECUTABLE="${GIT_EXECUTABLE}"
             -DCMAKE_CURRENT_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
             -P "${CMAKE_SOURCE_DIR}/CMakeModules/GenerateIOSBuildInfo.cmake"
-    DEPENDS "${CMAKE_SOURCE_DIR}/CMakeModules/GenerateIOSBuildInfo.cmake"
+    BYPRODUCTS "${IOS_BUILD_INFO_SRC}"
     COMMENT "Generating iOS build info (git commit/date)"
     VERBATIM)
 set_source_files_properties("${IOS_BUILD_INFO_SRC}" PROPERTIES GENERATED TRUE)
@@ -53,6 +57,8 @@ add_library(azahar_ios STATIC
     AzaharBridge/applets_ios.h
     AzaharBridge/applets_ios.mm
 )
+
+add_dependencies(azahar_ios azahar_ios_build_info)
 
 target_include_directories(azahar_ios PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
