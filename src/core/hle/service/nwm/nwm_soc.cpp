@@ -48,11 +48,11 @@ void NWM_SOC::GetMbufPoolInformation(Kernel::HLERequestContext& ctx) {
     // Create shared memory and event on first call (lazy initialization)
     if (!mbuf_shared_mem) {
         auto process = system.Kernel().GetCurrentProcess();
-        mbuf_shared_mem = system.Kernel().CreateSharedMemory(
+        auto result = system.Kernel().CreateSharedMemory(
             process, MbufPoolSize, Kernel::MemoryPermission::ReadWrite,
             Kernel::MemoryPermission::ReadWrite, 0, Kernel::MemoryRegion::SYSTEM,
             "nwm::SOC mbuf pool");
-        if (!mbuf_shared_mem.Succeeded()) {
+        if (!result.Succeeded()) {
             LOG_ERROR(Service_NWM, "Failed to create mbuf pool shared memory");
             IPC::RequestParser rp(ctx);
             IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
@@ -60,8 +60,10 @@ void NWM_SOC::GetMbufPoolInformation(Kernel::HLERequestContext& ctx) {
             return;
         }
 
+        mbuf_shared_mem = std::move(result).Unwrap();
+
         // Zero-initialize the shared memory
-        auto* mem = mbuf_shared_mem.Unwrap()->GetPointer(0);
+        auto* mem = mbuf_shared_mem->GetPointer(0);
         if (mem) {
             std::memset(mem, 0, MbufPoolSize);
         }
@@ -82,7 +84,7 @@ void NWM_SOC::GetMbufPoolInformation(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(5, 0);
     rb.Push(ResultSuccess);
     rb.Push<u32>(MbufPoolSize); // sharedmem_size at cmdreply[2]
-    rb.PushCopyObjects(mbuf_shared_mem.Unwrap(), mbuf_event);
+    rb.PushCopyObjects(mbuf_shared_mem, mbuf_event);
     // cmdreply[4] = sharedmem_handle, cmdreply[5] = eventhandle
 }
 
