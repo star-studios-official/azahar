@@ -201,11 +201,11 @@ inline bool IsNDSiROM(const NDSROMHeader& header) {
 }
 
 /// Generate a synthetic 3DS title ID from NDS game code
-/// Format: 0x00030000 | (game_code << 8)
-/// This matches how the 3DS represents TWL titles
+/// Format: high=0x00030005 (TWL application), low=game_code<<8
+/// This matches how the 3DS represents TWL application titles on game cards
 inline u64 GetNDSSyntheticTitleID(const NDSROMHeader& header) {
     const u32 game_code = GetNDSGameCode(header);
-    return 0x00030000 | (static_cast<u64>(game_code) << 8);
+    return (static_cast<u64>(0x00030005) << 32) | (static_cast<u64>(game_code) << 8);
 }
 
 } // namespace FileSys

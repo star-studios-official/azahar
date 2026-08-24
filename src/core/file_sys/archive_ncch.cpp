@@ -20,6 +20,8 @@
 #include "core/file_sys/errors.h"
 #include "core/file_sys/ivfc_archive.h"
 #include "core/file_sys/ncch_container.h"
+#include "core/file_sys/nds_rom.h"
+#include "core/file_sys/nds_smdh.h"
 #include "core/hle/service/am/am.h"
 #include "core/hle/service/fs/archive.h"
 #include "core/loader/loader.h"
@@ -95,6 +97,36 @@ ResultVal<std::unique_ptr<FileBackend>> NCCHArchive::OpenFile(const Path& path, 
             return ResultNotFound;
         }
 
+        // Check if this is a TWL (DS/DSi) ROM
+        if (FileSys::IsNDSROM(cartridge)) {
+            // For TWL ROMs, handle ExeFS requests differently
+            if (openfile_path.filepath_type == NCCHFilePathType::ExeFS) {
+                std::string exefs_filepath(openfile_path.exefs_filepath.data());
+                
+                // The Home Menu reads ExeFS:/icon for the game icon
+                // For TWL ROMs, we provide synthetic SMDH data
+                if (exefs_filepath == "icon") {
+                    FileSys::NDSROMHeader nds_header{};
+                    if (FileSys::ReadNDSROMHeader(cartridge, nds_header)) {
+                        auto smdh_data = FileSys::GenerateNDS_SMDH(nds_header);
+                        if (!smdh_data.empty()) {
+                            std::unique_ptr<DelayGenerator> delay_generator = 
+                                std::make_unique<ExeFSDelayGenerator>();
+                            auto file = std::make_unique<NCCHFile>(std::move(smdh_data), 
+                                                                 std::move(delay_generator));
+                            return file;
+                        }
+                    }
+                }
+                // For other ExeFS files (logo, banner), return not found
+                // TWL ROMs don't have these in ExeFS format
+                return ResultNotFound;
+            }
+            // For RomFS or Code requests on TWL ROMs, return not found
+            return ResultNotFound;
+        }
+
+        // CTR (3DS) ROM handling
         u64 card_program_id;
         auto cartridge_loader = Loader::GetLoader(cartridge);
         FileSys::NCCHContainer cartridge_ncch(cartridge);

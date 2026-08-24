@@ -747,6 +747,21 @@ private:
      */
     void GetSaveDataSecureValue(Kernel::HLERequestContext& ctx);
 
+    /// Reads the NDS ROM header (0x3B4 bytes) from a TWL game card
+    void GetLegacyRomHeader(Kernel::HLERequestContext& ctx);
+
+    /// Reads the NDS banner data (0x23C0 bytes) from a TWL game card
+    void GetLegacyBannerData(Kernel::HLERequestContext& ctx);
+
+    /// Reads the NDS ROM header (variable size) from a TWL game card
+    void GetLegacyRomHeader2(Kernel::HLERequestContext& ctx);
+
+    /// Reads NDS sub-banner data (variable size) from a TWL game card
+    void GetLegacySubBannerData(Kernel::HLERequestContext& ctx);
+
+    /// Helper: reads raw bytes from the NDS ROM file at a given offset
+    bool ReadFromGameCardRom(u64 offset, void* out, u32 size) const;
+
     std::unordered_map<u32, ProgramInfo> program_info_map;
     std::string current_gamecard_path;
 

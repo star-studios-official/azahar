@@ -1796,6 +1796,145 @@ ResultVal<u16> FS_USER::GetSpecialContentIndexFromTMD(MediaType media_type, u64 
     return ResultUnknown;
 }
 
+bool FS_USER::ReadFromGameCardRom(u64 offset, void* out, u32 size) const {
+    const auto& cartridge = system.GetCartridge();
+    if (cartridge.empty() || !FileSys::IsNDSROM(cartridge)) {
+        return false;
+    }
+    FileUtil::IOFile file(cartridge, "rb");
+    if (!file.IsOpen()) {
+        return false;
+    }
+    file.Seek(offset, SEEK_SET);
+    return file.ReadBytes(out, size) == size;
+}
+
+void FS_USER::GetLegacyRomHeader(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    // [1] = media_type, [2-3] = u64 program_id, [4] = translate desc, [5] = output ptr
+    const auto media_type = rp.PopEnum<MediaType>();
+    const auto title_id = rp.Pop<u64>();
+    rp.Pop<u32>(); // reserved
+    auto output = rp.PopMappedBuffer();
+
+    constexpr u32 NDS_HEADER_SIZE = 0x3B4;
+    std::vector<u8> header(NDS_HEADER_SIZE, 0);
+
+    bool success = false;
+    if (media_type == MediaType::GameCard) {
+        success = ReadFromGameCardRom(0, header.data(), NDS_HEADER_SIZE);
+    }
+
+    if (success) {
+        output.WriteBytes(header.data(), header.size());
+    }
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(success ? ResultSuccess
+                     : Result(FileSys::ErrCodes::NonExistingPath, ErrorModule::FS,
+                              ErrorSummary::NotFound, ErrorLevel::Status));
+
+    LOG_DEBUG(Service_FS, "GetLegacyRomHeader: media_type={}, title_id={:016X}, success={}",
+              static_cast<u8>(media_type), title_id, success);
+}
+
+void FS_USER::GetLegacyBannerData(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const auto media_type = rp.PopEnum<MediaType>();
+    const auto title_id = rp.Pop<u64>();
+    rp.Pop<u32>(); // reserved
+    auto output = rp.PopMappedBuffer();
+
+    constexpr u32 BANNER_SIZE = 0x23C0; // 9152 bytes = sizeof(NDSBanner)
+    std::vector<u8> banner(BANNER_SIZE, 0);
+
+    bool success = false;
+    if (media_type == MediaType::GameCard) {
+        const auto& cartridge = system.GetCartridge();
+        if (!cartridge.empty() && FileSys::IsNDSROM(cartridge)) {
+            // Get the actual file size
+            FileUtil::IOFile rom_file(cartridge, "rb");
+            const u64 file_size = rom_file.GetSize();
+            rom_file.Close();
+
+            // Read the NDS ROM header to get the banner offset
+            NDSROMHeader nds_header{};
+            if (ReadFromGameCardRom(0, &nds_header, sizeof(NDSROMHeader))) {
+                u32 banner_offset = nds_header.banner_offset;
+                if (banner_offset > 0 &&
+                    static_cast<u64>(banner_offset) + BANNER_SIZE <= file_size) {
+                    success = ReadFromGameCardRom(banner_offset, banner.data(), BANNER_SIZE);
+                }
+            }
+        }
+    }
+
+    if (success) {
+        output.WriteBytes(banner.data(), banner.size());
+    }
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(success ? ResultSuccess
+                     : Result(FileSys::ErrCodes::NonExistingPath, ErrorModule::FS,
+                              ErrorSummary::NotFound, ErrorLevel::Status));
+
+    LOG_DEBUG(Service_FS, "GetLegacyBannerData: media_type={}, title_id={:016X}, success={}",
+              static_cast<u8>(media_type), title_id, success);
+}
+
+void FS_USER::GetLegacyRomHeader2(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const auto output_size = rp.Pop<u32>();
+    const auto media_type = rp.PopEnum<MediaType>();
+    const auto title_id = rp.Pop<u64>();
+    rp.Pop<u32>(); // reserved
+    auto output = rp.PopMappedBuffer();
+
+    std::vector<u8> header(output_size, 0);
+
+    bool success = false;
+    if (media_type == MediaType::GameCard) {
+        // The NDS header is 4096 bytes but Home Menu only reads 0x378 or similar
+        u32 read_size = std::min(output_size, static_cast<u32>(4096));
+        success = ReadFromGameCardRom(0, header.data(), read_size);
+    }
+
+    if (success) {
+        output.WriteBytes(header.data(), header.size());
+    }
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(success ? ResultSuccess
+                     : Result(FileSys::ErrCodes::NonExistingPath, ErrorModule::FS,
+                              ErrorSummary::NotFound, ErrorLevel::Status));
+
+    LOG_DEBUG(Service_FS,
+              "GetLegacyRomHeader2: media_type={}, title_id={:016X}, size=0x{:X}, success={}",
+              static_cast<u8>(media_type), title_id, output_size, success);
+}
+
+void FS_USER::GetLegacySubBannerData(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const auto output_size = rp.Pop<u32>();
+    const auto media_type = rp.PopEnum<MediaType>();
+    const auto title_id = rp.Pop<u64>();
+    rp.Pop<u32>(); // reserved
+    auto output = rp.PopMappedBuffer();
+
+    // Sub-banner data follows the main banner in the NDS ROM.
+    // For the Home Menu, returning all zeros is acceptable since it's
+    // primarily used for extended game banner animations (DSi).
+    std::vector<u8> data(output_size, 0);
+    output.WriteBytes(data.data(), data.size());
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+
+    LOG_DEBUG(Service_FS,
+              "GetLegacySubBannerData: media_type={}, title_id={:016X}, size=0x{:X}",
+              static_cast<u8>(media_type), title_id, output_size);
+}
+
 FS_USER::FS_USER(Core::System& system)
     : ServiceFramework("fs:USER", 30), system(system), archives(system.ArchiveManager()) {
     static const FunctionInfo functions[] = {
@@ -1860,8 +1999,8 @@ FS_USER::FS_USER(Core::System& system)
         {0x0838, nullptr, "SetCardSpiBusMode"},
         {0x0839, nullptr, "SendInitializeInfoTo9"},
         {0x083A, &FS_USER::GetSpecialContentIndex, "GetSpecialContentIndex"},
-        {0x083B, nullptr, "GetLegacyRomHeader"},
-        {0x083C, nullptr, "GetLegacyBannerData"},
+        {0x083B, &FS_USER::GetLegacyRomHeader, "GetLegacyRomHeader"},
+        {0x083C, &FS_USER::GetLegacyBannerData, "GetLegacyBannerData"},
         {0x083D, nullptr, "CheckAuthorityToAccessExtSaveData"},
         {0x083E, nullptr, "QueryTotalQuotaSize"},
         {0x083F, nullptr, "GetExtDataBlockSize"},
@@ -1871,14 +2010,14 @@ FS_USER::FS_USER(Core::System& system)
         {0x0843, nullptr, "InitializeCtrFileSystem"},
         {0x0844, nullptr, "CreateSeed"},
         {0x0845, &FS_USER::GetFormatInfo, "GetFormatInfo"},
-        {0x0846, nullptr, "GetLegacyRomHeader2"},
+        {0x0846, &FS_USER::GetLegacyRomHeader2, "GetLegacyRomHeader2"},
         {0x0847, nullptr, "FormatCtrCardUserSaveData"},
         {0x0848, nullptr, "GetSdmcCtrRootPath"},
         {0x0849, &FS_USER::GetArchiveResource, "GetArchiveResource"},
         {0x084A, &FS_USER::ExportIntegrityVerificationSeed, "ExportIntegrityVerificationSeed"},
         {0x084B, nullptr, "ImportIntegrityVerificationSeed"},
         {0x084C, &FS_USER::FormatSaveData, "FormatSaveData"},
-        {0x084D, nullptr, "GetLegacySubBannerData"},
+        {0x084D, &FS_USER::GetLegacySubBannerData, "GetLegacySubBannerData"},
         {0x084E, nullptr, "UpdateSha256Context"},
         {0x084F, nullptr, "ReadSpecialFile"},
         {0x0850, nullptr, "GetSpecialFileSize"},
