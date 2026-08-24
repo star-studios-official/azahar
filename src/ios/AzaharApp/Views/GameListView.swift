@@ -116,9 +116,9 @@ struct GameListView: View {
                                     Button {
                                         let success = az_insert_cartridge(game.path)
                                         if !success {
-                                            AppLogger.error("Game Card", message: "Failed to insert game card: \(game.title)")
+                                            AppLogger.error("Game Card", message: "Failed to insert game card")
                                         } else {
-                                            AppLogger.info("Game Card", details: "Inserted \(game.title) as game card")
+                                            AppLogger.info("Game Card: Inserted as game card")
                                         }
                                     } label: {
                                         Label("Load as Game Card", systemImage: "internaldrive.fill")
