@@ -52,28 +52,28 @@ bool IsNDSROM(const std::string& filepath) {
 bool ReadNDSROMHeader(const std::string& filepath, NDSROMHeader& header) {
     FileUtil::IOFile file(filepath, "rb");
     if (!file.IsOpen()) {
-        LOG_ERROR(FileSys, "Failed to open NDS ROM: {}", filepath);
+        LOG_ERROR(Loader, "Failed to open NDS ROM: {}", filepath);
         return false;
     }
 
     if (file.GetSize() < sizeof(NDSROMHeader)) {
-        LOG_ERROR(FileSys, "NDS ROM too small: {} bytes", file.GetSize());
+        LOG_ERROR(Loader, "NDS ROM too small: {} bytes", file.GetSize());
         return false;
     }
 
     std::memset(&header, 0, sizeof(header));
     if (file.ReadBytes(&header, sizeof(header)) != sizeof(header)) {
-        LOG_ERROR(FileSys, "Failed to read NDS ROM header from {}", filepath);
+        LOG_ERROR(Loader, "Failed to read NDS ROM header from {}", filepath);
         return false;
     }
 
     // Validate the header
     if (!IsNDSROM(filepath)) {
-        LOG_ERROR(FileSys, "Invalid NDS ROM header in {}", filepath);
+        LOG_ERROR(Loader, "Invalid NDS ROM header in {}", filepath);
         return false;
     }
 
-    LOG_INFO(FileSys, "Read NDS ROM header: title='{}', code='{}', maker='{}', DSi={}",
+    LOG_INFO(Loader, "Read NDS ROM header: title='{}', code='{}', maker='{}', DSi={}",
              GetNDSGameTitle(header), std::string(header.game_code, 4),
              GetNDSMakerCode(header), IsNDSiROM(header));
 

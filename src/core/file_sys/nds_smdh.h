@@ -11,28 +11,39 @@
 
 namespace FileSys {
 
-/// SMDH icon size (32x32 pixels, RGB565)
-constexpr u32 SMDH_ICON_SIZE = 32 * 32 * 2; // 2048 bytes
+/// SMDH total size (0x36C0 bytes)
+constexpr u32 SMDH_TOTAL_SIZE = 0x36C0;
 
-/// SMDH title entry (per language)
+/// SMDH title entry (per language) - 0x200 bytes each
 struct SMDHTitleEntry {
-    char16_t short_title[0x40];    // 64 chars
-    char16_t long_title[0x80];     // 128 chars
-    char16_t publisher[0x40];      // 64 chars
+    char16_t short_title[0x40];    // 64 chars (0x80 bytes)
+    char16_t long_title[0x80];     // 128 chars (0x100 bytes)
+    char16_t publisher[0x40];      // 64 chars (0x80 bytes)
 };
-static_assert(sizeof(SMDHTitleEntry) == 0x140, "SMDHTitleEntry must be 0x140 bytes");
+static_assert(sizeof(SMDHTitleEntry) == 0x200, "SMDHTitleEntry must be 0x200 bytes");
 
 /// SMDH structure (compatible with 3DS SMDH format)
+/// Total size: 0x36C0 bytes (14016)
 struct SMDHData {
-    u32 magic;                      // "SMDH"
-    u16 version;                    // 0x0001
+    u32 magic;                          // "SMDH" (0x48444D53)
+    u16 version;                        // 0x0001
     u16 reserved1;
-    u8 age_ratings[16];            // Age rating flags
-    u8 icon_data[SMDH_ICON_SIZE]; // 32x32 RGB565 icon
-    u16 reserved2[3];
-    char16_t titles[16][0x100];    // Titles in 16 languages
+    SMDHTitleEntry titles[16];          // 16 language titles (0x2000 bytes)
+    u8 age_ratings[16];                // Age rating flags
+    u32 region_lockout;                 // Region lockout bitmask
+    u8 match_maker_id[4];              // Match Maker ID
+    u8 match_maker_bit_id[8];          // Match Maker BIT ID
+    u32 flags;                          // Application flags
+    u16 eula_version;                   // EULA version
+    u16 reserved2;
+    float optimal_animation_frame;      // Optimal animation frame
+    u32 cec_id;                         // CEC (StreetPass) ID
+    u8 reserved3[8];
+    // Icon graphics at offset 0x2040
+    u8 small_icon[24 * 24 * 2];        // 24x24 RGB565 (0x480 bytes)
+    u8 large_icon[48 * 48 * 2];        // 48x48 RGB565 (0x1200 bytes)
 };
-static_assert(sizeof(SMDHData) == 0x2020, "SMDHData must be 0x2020 bytes");
+static_assert(sizeof(SMDHData) == 0x36C0, "SMDHData must be 0x36C0 bytes");
 
 /// Generate synthetic SMDH data from NDS ROM header and banner
 /// Returns empty vector on failure
