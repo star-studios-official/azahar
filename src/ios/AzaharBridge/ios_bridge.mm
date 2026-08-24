@@ -17,15 +17,6 @@
 
 #include <QuartzCore/QuartzCore.h>
 
-// Fresh git info regenerated at every build (see CMakeModules/GenerateIOSBuildInfo.cmake).
-// Declared here (not in azahar_ios.h) because the bridging header is parsed as
-// Objective-C and cannot contain C++ namespaces.
-namespace Azahar {
-extern const char* GetIOSBuildCommit();
-extern const char* GetIOSBuildBranch();
-extern const char* GetIOSBuildDate();
-} // namespace Azahar
-
 #include "common/arch.h"
 #include "common/aarch64/cpu_detect.h"
 #include "common/common_paths.h"
@@ -194,12 +185,7 @@ void az_reload_settings(void) {
 }
 
 void az_log_device_info(void) {
-    // g_scm_rev/g_scm_branch come from scm_rev.cpp which is generated once at CMake configure
-    // time and can be stale on incremental builds. The Azahar::* values are regenerated on
-    // every build, so when the two disagree the scm_rev values are outdated.
     LOG_INFO(Frontend, "Azahar iOS build: {} {}", Common::g_scm_rev, Common::g_scm_branch);
-    LOG_INFO(Frontend, "Build commit: {} ({}, {})", Azahar::GetIOSBuildCommit(),
-             Azahar::GetIOSBuildBranch(), Azahar::GetIOSBuildDate());
     LOG_INFO(Frontend, "CPU: {}", Common::GetCPUCaps().cpu_string);
 }
 
