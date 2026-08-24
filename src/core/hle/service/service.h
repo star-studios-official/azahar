@@ -198,7 +198,7 @@ struct ServiceModuleInfo {
     bool is_online_recommended;
 };
 
-extern const std::array<ServiceModuleInfo, 41> service_module_map;
+extern const std::array<ServiceModuleInfo, 42> service_module_map;
 
 } // namespace Service
 
