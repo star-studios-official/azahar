@@ -798,7 +798,7 @@ struct socket *tcpx_listen(Slirp *slirp,
                            int flags)
 {
     struct socket *so;
-    int s, opt = 1;
+    int s, opt = 1, ret;
     socklen_t addrlen;
 
     DEBUG_CALL("tcpx_listen");
@@ -807,11 +807,10 @@ struct socket *tcpx_listen(Slirp *slirp,
     char portstr[6];
     switch (haddr->sa_family) {
     case AF_INET:
-    case AF_INET6: {
-        int ret = getnameinfo(haddr, haddrlen, addrstr, sizeof(addrstr), portstr, sizeof(portstr), NI_NUMERICHOST|NI_NUMERICSERV);
+    case AF_INET6:
+        ret = getnameinfo(haddr, haddrlen, addrstr, sizeof(addrstr), portstr, sizeof(portstr), NI_NUMERICHOST|NI_NUMERICSERV);
         (void)ret;
         g_assert(ret == 0);
-    }
         DEBUG_ARG("hfamily = INET");
         DEBUG_ARG("haddr = %s", addrstr);
         DEBUG_ARG("hport = %s", portstr);
@@ -829,6 +828,7 @@ struct socket *tcpx_listen(Slirp *slirp,
     case AF_INET:
     case AF_INET6:
         ret = getnameinfo(laddr, laddrlen, addrstr, sizeof(addrstr), portstr, sizeof(portstr), NI_NUMERICHOST|NI_NUMERICSERV);
+        (void)ret;
         g_assert(ret == 0);
         DEBUG_ARG("laddr = %s", addrstr);
         DEBUG_ARG("lport = %s", portstr);
