@@ -35,7 +35,7 @@ class DSi_I2S;
 class DSi_CamModule;
 class DSi_AES;
 class DSi_DSP;
-class DSiArgs;
+struct DSiArgs;
 
 namespace DSi_NAND
 {
