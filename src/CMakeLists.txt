@@ -193,6 +193,9 @@ endif()
 
 add_subdirectory(common)
 
+# Allow cross-directory target_link_libraries (needed by melonDS teakra)
+cmake_policy(SET CMP0079 NEW)
+
 # Configure melonDS for embedded use (no JIT on iOS, Vulkan via MoltenVK)
 set(ENABLE_JIT OFF CACHE BOOL "Disable melonDS JIT (not available on iOS)" FORCE)
 set(ENABLE_OGLRENDERER OFF CACHE BOOL "Disable melonDS OpenGL (use Vulkan via MoltenVK)" FORCE)
@@ -214,6 +217,22 @@ if (NOT TARGET glslang::glslang AND TARGET glslang)
 endif()
 if (NOT TARGET glslang::SPIRV AND TARGET SPIRV)
     add_library(glslang::SPIRV ALIAS SPIRV)
+endif()
+
+# melonDS expects a FixInterfaceIncludes CMake module that doesn't exist
+# in Azahar's build tree.  Create a no-op module so the include succeeds.
+set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" "${CMAKE_BINARY_DIR}/melonDS_modules")
+file(WRITE "${CMAKE_BINARY_DIR}/melonDS_modules/FixInterfaceIncludes.cmake"
+     "# No-op: melonDS FixInterfaceIncludes workaround\n")
+
+# melonDS bundles its own teakra, but Azahar already has one in externals/.
+# Disable melonDS's teakra subdirectory by pre-setting the target guard so
+# the add_subdirectory inside melonDS is skipped, and redirect the link to
+# Azahar's existing teakra library.
+if (TARGET teakra)
+    set(_MELONDS_TEAKRA_EXISTS TRUE)
+else()
+    set(_MELONDS_TEAKRA_EXISTS FALSE)
 endif()
 
 add_subdirectory(core_melonds/src)

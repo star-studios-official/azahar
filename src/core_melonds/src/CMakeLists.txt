@@ -241,9 +241,16 @@ target_sources(core PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/version.h")
 target_include_directories(core PUBLIC "${CMAKE_CURRENT_BINARY_DIR}")
 
 set(BUILD_SHARED_LIBS OFF)
-add_subdirectory(teakra EXCLUDE_FROM_ALL)
-# Workaround for building teakra with -O0 on Windows either failing or hanging forever
-target_compile_options(teakra PRIVATE "$<$<CONFIG:DEBUG>:-Og>")
+if (NOT TARGET teakra)
+    # melonDS bundles its own teakra — only build it if Azahar's copy hasn't
+    # already defined the target (from externals/teakra).
+    add_subdirectory(teakra EXCLUDE_FROM_ALL)
+    target_compile_options(teakra PRIVATE "$<$<CONFIG:DEBUG>:-Og>")
+else()
+    # Azahar's teakra already exists — add its include path so melonDS
+    # can find <teakra/teakra.h>.  The target lives in externals/teakra/src.
+    target_include_directories(core PRIVATE "${CMAKE_SOURCE_DIR}/externals/teakra/include")
+endif()
 target_link_libraries(core PRIVATE teakra)
 
 if (NOT MSVC)
