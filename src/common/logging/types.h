@@ -106,6 +106,7 @@ enum class Class : u8 {
     WebService,        ///< Interface to Citra Web Services
     RPC_Server,        ///< RPC server
     RetroAchievements, ///< RetroAchievements integration
+    TWL,               ///< TWL/DS/DSi emulation (melonDS core)
     Count,             ///< Total number of logging classes
 };
 

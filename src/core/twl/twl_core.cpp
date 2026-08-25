@@ -30,23 +30,19 @@
 #include "net/Net.h"
 #include "net/Net_Slirp.h"
 
-LOG_MODULE(TWL, Log::Class::Loader);
-
-namespace TWL {
-
 // ---------------------------------------------------------------------------
-// melonDS Platform implementation (required by melonDS core)
+// Shared state between melonDS Platform callbacks and TWL::Core
+// These are at file scope so both namespaces can access them.
 // ---------------------------------------------------------------------------
 
 namespace {
 
-// State shared between melonDS callbacks and our Core instance
 struct PlatformState {
     std::string base_path;
     std::string nds_save_path;
     std::string firmware_path;
     std::atomic<u16> buttons{0};
-    TouchState touch;
+    TWL::TouchState touch;
     std::function<void()> stop_callback;
 
     // Save data
@@ -67,6 +63,11 @@ struct FileHandleImpl {
 };
 
 } // anonymous namespace
+
+// ---------------------------------------------------------------------------
+// melonDS Platform implementation (required by melonDS core)
+// This MUST be in ::melonDS::Platform, NOT inside namespace TWL.
+// ---------------------------------------------------------------------------
 
 namespace melonDS::Platform {
 
@@ -453,8 +454,6 @@ DynamicLibrary* DynamicLibrary_Load(const char* lib) { return nullptr; }
 void DynamicLibrary_Unload(DynamicLibrary* lib) {}
 void* DynamicLibrary_LoadFunction(DynamicLibrary* lib, const char* name) { return nullptr; }
 
-
-
 void Speaker_ReadSamples(u16* data, u32 num_samples, void* userdata) {}
 void Speaker_SetFormat(int bits, int sample_rate, void* userdata) {}
 void Speaker_Stop(void* userdata) {}
@@ -466,6 +465,8 @@ void Speaker_WriteSamples(const s16* data, u32 num_samples, void* userdata) {}
 // ---------------------------------------------------------------------------
 // TWL::Core implementation
 // ---------------------------------------------------------------------------
+
+namespace TWL {
 
 struct Core::Impl {
     std::unique_ptr<melonDS::NDS> nds;
@@ -550,19 +551,9 @@ bool Core::Initialize(const std::string& nds_rom_path) {
         return false;
     }
 
-    // Load save data into cart if available
-    if (!g_platform_state.save_data.empty()) {
-        // The save data will be used when the cart accesses SRAM
-    }
-
     impl->nds->NDSCartSlot.SetCart(std::move(cart));
 
     // Set up networking (WFC / Wiimmfi)
-    // Register instance 0 for packet dispatching, then create a Net_Slirp
-    // driver which provides a user-mode TCP/IP stack. The DS firmware's
-    // WFC library sends 802.3 Ethernet frames through WifiAP which calls
-    // Platform::Net_SendPacket; we route them through libslirp which handles
-    // DNS, TCP, UDP and NAT on the host network.
     g_platform_state.net.RegisterInstance(0);
     {
         auto send_callback = [](const u8* data, int len) {
@@ -638,7 +629,7 @@ void Core::RunLoop() {
         }
 
         // Check if NDS wants to stop
-        if (impl->nds->HaltIRQed() || stop_requested) {
+        if (impl->nds->HaltInterrupted(0) || stop_requested) {
             LOG_INFO(TWL, "NDS halted or stop requested");
             break;
         }
@@ -675,12 +666,12 @@ void Core::UpdateInput() {
     TouchState touch = touch_state;
 
     // melonDS input is directly set on the NDS
-    impl->nds->SetKeyMask(btns);
+    impl->nds->SetKeyMask(static_cast<u32>(btns));
 
     if (touch.pressed) {
-        impl->nds->TouchScreen.press(touch.x, touch.y);
+        impl->nds->TouchScreen(touch.x, touch.y);
     } else {
-        impl->nds->TouchScreen.release();
+        impl->nds->ReleaseScreen();
     }
 }
 
@@ -709,25 +700,18 @@ std::string Core::GetGameCode() const {
 u16 Core::Map3DSButtonsToNDS(u32 hbl_button_state, s16 circle_pad_x, s16 circle_pad_y) {
     u16 nds_buttons = 0;
 
-    // Map 3DS button IDs to NDS buttons
-    // 3DS input_manager_ios.h uses these IDs:
-    //   A=700, B=701, X=702, Y=703, Start=704, Select=705
-    //   ZL=707, ZR=708, DPad=709-712, L=773, R=774
-    // NDS button bits: A=0, B=1, Select=2, Start=3, Right=4, Left=5, Up=6, Down=7, R=8, L=9
-    //                  X=10, Y=11
-
-    if (hbl_button_state & (1 << 700)) nds_buttons |= TWL::ButtonA;       // A
-    if (hbl_button_state & (1 << 701)) nds_buttons |= TWL::ButtonB;       // B
-    if (hbl_button_state & (1 << 705)) nds_buttons |= TWL::ButtonSelect;  // Select
-    if (hbl_button_state & (1 << 704)) nds_buttons |= TWL::ButtonStart;   // Start
-    if (hbl_button_state & (1 << 712)) nds_buttons |= TWL::ButtonRight;   // DPad Right
-    if (hbl_button_state & (1 << 711)) nds_buttons |= TWL::ButtonLeft;    // DPad Left
-    if (hbl_button_state & (1 << 709)) nds_buttons |= TWL::ButtonUp;      // DPad Up
-    if (hbl_button_state & (1 << 710)) nds_buttons |= TWL::ButtonDown;    // DPad Down
-    if (hbl_button_state & (1 << 774)) nds_buttons |= TWL::ButtonR;       // R
-    if (hbl_button_state & (1 << 773)) nds_buttons |= TWL::ButtonL;       // L
-    if (hbl_button_state & (1 << 702)) nds_buttons |= TWL::ButtonX;       // X
-    if (hbl_button_state & (1 << 703)) nds_buttons |= TWL::ButtonY;       // Y
+    if (hbl_button_state & (1 << 700)) nds_buttons |= TWL::ButtonA;
+    if (hbl_button_state & (1 << 701)) nds_buttons |= TWL::ButtonB;
+    if (hbl_button_state & (1 << 705)) nds_buttons |= TWL::ButtonSelect;
+    if (hbl_button_state & (1 << 704)) nds_buttons |= TWL::ButtonStart;
+    if (hbl_button_state & (1 << 712)) nds_buttons |= TWL::ButtonRight;
+    if (hbl_button_state & (1 << 711)) nds_buttons |= TWL::ButtonLeft;
+    if (hbl_button_state & (1 << 709)) nds_buttons |= TWL::ButtonUp;
+    if (hbl_button_state & (1 << 710)) nds_buttons |= TWL::ButtonDown;
+    if (hbl_button_state & (1 << 774)) nds_buttons |= TWL::ButtonR;
+    if (hbl_button_state & (1 << 773)) nds_buttons |= TWL::ButtonL;
+    if (hbl_button_state & (1 << 702)) nds_buttons |= TWL::ButtonX;
+    if (hbl_button_state & (1 << 703)) nds_buttons |= TWL::ButtonY;
 
     // Map CirclePad to DPad if pressed enough (threshold ~40)
     if (std::abs(circle_pad_x) > 40) {
@@ -747,7 +731,6 @@ void Core::SetButtonState(u16 buttons) {
 }
 
 void Core::SetTouchState(const TouchState& touch) {
-    std::lock_guard lock(impl->nds->Mutex);
     touch_state = touch;
 }
 
@@ -944,7 +927,7 @@ bool Core::InitializeDSiNAND(const std::string& nand_path) {
     };
 
     // Open the NAND file
-    Platform::FileHandle* nand_file = Platform::OpenFile(nand_path, Platform::FileMode::Read);
+    melonDS::Platform::FileHandle* nand_file = melonDS::Platform::OpenFile(nand_path, melonDS::Platform::FileMode::Read);
     if (!nand_file) {
         error_message = "Failed to open DSi NAND: " + nand_path;
         LOG_ERROR(TWL, "{}", error_message);
@@ -953,24 +936,23 @@ bool Core::InitializeDSiNAND(const std::string& nand_path) {
 
     // The NAND image needs the eMMC CID for crypto.
     // Read the nocash footer to get it.
-    // The footer is at the end of the file: "DSi eMMC CID/CPU" + 16 bytes CID + 8 bytes ConsoleID
-    Platform::FileSeek(nand_file, -0x40, Platform::FileSeekOrigin::End);
+    melonDS::Platform::FileSeek(nand_file, -0x40, melonDS::Platform::FileSeekOrigin::End);
     char footer_check[16];
-    Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
+    melonDS::Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
 
     DSi_NAND::DSiKey es_keyY{};
     if (memcmp(footer_check, "DSi eMMC CID/CPU", 16) == 0) {
-        Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
+        melonDS::Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
         LOG_INFO(TWL, "Read eMMC CID from nocash footer");
     } else {
         // Try the alternate footer location
-        Platform::FileSeek(nand_file, 0x000FF800, Platform::FileSeekOrigin::Start);
-        Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
+        melonDS::Platform::FileSeek(nand_file, 0x000FF800, melonDS::Platform::FileSeekOrigin::Start);
+        melonDS::Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
         if (memcmp(footer_check, "DSi eMMC CID/CPU", 16) == 0) {
-            Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
+            melonDS::Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
             LOG_INFO(TWL, "Read eMMC CID from alternate footer location");
         } else {
-            Platform::CloseFile(nand_file);
+            melonDS::Platform::CloseFile(nand_file);
             error_message = "DSi NAND missing nocash footer";
             LOG_ERROR(TWL, "{}", error_message);
             return false;
@@ -980,7 +962,7 @@ bool Core::InitializeDSiNAND(const std::string& nand_path) {
     // Create NAND image
     DSi_NAND::NANDImage nand_img(nand_file, es_keyY);
     if (!nand_img) {
-        Platform::CloseFile(nand_file);
+        melonDS::Platform::CloseFile(nand_file);
         error_message = "Failed to initialize DSi NAND crypto";
         LOG_ERROR(TWL, "{}", error_message);
         return false;
@@ -1054,32 +1036,32 @@ std::vector<std::string> Core::GetDSiNANDTitles(const std::string& nand_path) {
     if (!FileUtil::Exists(nand_path))
         return titles;
 
-    Platform::FileHandle* nand_file = Platform::OpenFile(nand_path, Platform::FileMode::Read);
+    melonDS::Platform::FileHandle* nand_file = melonDS::Platform::OpenFile(nand_path, melonDS::Platform::FileMode::Read);
     if (!nand_file)
         return titles;
 
     // Read nocash footer to get eMMC CID
-    Platform::FileSeek(nand_file, -0x40, Platform::FileSeekOrigin::End);
+    melonDS::Platform::FileSeek(nand_file, -0x40, melonDS::Platform::FileSeekOrigin::End);
     char footer_check[16];
-    Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
+    melonDS::Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
 
     DSi_NAND::DSiKey es_keyY{};
     if (memcmp(footer_check, "DSi eMMC CID/CPU", 16) == 0) {
-        Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
+        melonDS::Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
     } else {
-        Platform::FileSeek(nand_file, 0x000FF800, Platform::FileSeekOrigin::Start);
-        Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
+        melonDS::Platform::FileSeek(nand_file, 0x000FF800, melonDS::Platform::FileSeekOrigin::Start);
+        melonDS::Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
         if (memcmp(footer_check, "DSi eMMC CID/CPU", 16) == 0) {
-            Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
+            melonDS::Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
         } else {
-            Platform::CloseFile(nand_file);
+            melonDS::Platform::CloseFile(nand_file);
             return titles;
         }
     }
 
     DSi_NAND::NANDImage nand_img(nand_file, es_keyY);
     if (!nand_img) {
-        Platform::CloseFile(nand_file);
+        melonDS::Platform::CloseFile(nand_file);
         return titles;
     }
 
@@ -1094,8 +1076,8 @@ std::vector<std::string> Core::GetDSiNANDTitles(const std::string& nand_path) {
     mount.ListTitles(0x0001, title_list); // User titles
 
     for (u32 titleid : title_list) {
-        NDSHeader header{};
-        NDSBanner banner{};
+        melonDS::NDSHeader header{};
+        melonDS::NDSBanner banner{};
         u32 version = 0;
         mount.GetTitleInfo(0x0003, titleid, version, &header, &banner);
 

@@ -139,7 +139,8 @@ bool ParseFilterRule(Filter& instance, Iterator begin, Iterator end) {
     CLS(Loader)                                                                                    \
     CLS(WebService)                                                                                \
     CLS(RPC_Server)                                                                                \
-    CLS(RetroAchievements)
+    CLS(RetroAchievements)                                                                        \
+    CLS(TWL)
 
 // GetClassName is a macro defined by Windows.h, grrr...
 const char* GetLogClassName(Class log_class) {
