@@ -264,9 +264,7 @@ if (NOT MSVC)
     # (which is fundamentally non-portable, so this is fine)
 endif()
 
-# Suppress all warnings for the melonDS core — it is third-party code built
-# under Azahar's -Werror.  Individual fixes would be fragile and upstream-
-incompatible.
+# Suppress all warnings for the melonDS core (third-party code)
 if (NOT MSVC)
     target_compile_options(core PRIVATE -w)
 endif()
