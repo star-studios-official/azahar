@@ -459,6 +459,7 @@ void tcp_connect(struct socket *inso)
     }
     {
         int ret = getnameinfo((const struct sockaddr *) &inso->lhost.ss, addrlen, addrstr, sizeof(addrstr), portstr, sizeof(portstr), NI_NUMERICHOST|NI_NUMERICSERV);
+        (void)ret;
         g_assert(ret == 0);
     }
     DEBUG_ARG("ip = [%s]:%s", addrstr, portstr);
