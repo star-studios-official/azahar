@@ -227,11 +227,22 @@ void Module::NSInterface::LaunchTitle(Kernel::HLERequestContext& ctx) {
         }
     }
 
-    // Check if this is a TWL title being launched
-    if (title_id != 0 && IsTWLTitle(title_id)) {
+    // Check if this is a TWL title being launched (either TWL title ID or TWL game card)
+    bool is_twl = false;
+    if (title_id == 0) {
+        // Game card: check if it's a TWL ROM
+        if (IsGameCardTWL(apt->system)) {
+            is_twl = true;
+        }
+    } else if (IsTWLTitle(title_id)) {
+        is_twl = true;
+    }
+
+    if (is_twl) {
         const auto& cartridge = apt->system.GetCartridge();
         if (!cartridge.empty()) {
-            LOG_INFO(Service_APT, "TWL title launch via LaunchTitle, redirecting to melonDS");
+            LOG_INFO(Service_APT, "TWL {} launch via LaunchTitle, redirecting to melonDS: {}",
+                      title_id == 0 ? "game card" : "title", cartridge);
             apt->system.RequestTWLLaunch(cartridge);
             IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
             rb.Push(ResultSuccess);

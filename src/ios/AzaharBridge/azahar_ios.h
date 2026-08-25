@@ -237,6 +237,15 @@ const char* az_get_melonds_bios(int bios_type);
 /// Run a DS/DSi ROM directly via melonDS (no 3DS Home Menu).
 void az_run_twl(const char* nds_rom_path);
 
+/// Boot DS firmware (NDS BIOS boot, no ROM required).
+void az_run_twl_firmware(void);
+
+/// Boot DSi mode with a NAND image.
+void az_run_twl_dsi_nand(const char* nand_path);
+
+/// Get list of titles installed on a DSi NAND (returns newline-separated string).
+const char* az_get_dsi_nand_titles(const char* nand_path);
+
 void az_pause_emulation(void);
 void az_unpause_emulation(void);
 void az_stop_emulation(void);
@@ -720,6 +729,32 @@ void az_eject_cartridge(void);
 
 /// Returns true if a virtual game card is currently inserted.
 bool az_is_cartridge_inserted(void);
+
+// ---------------------------------------------------------------------------
+// TWL (DS/DSi) emulation via melonDS
+// ---------------------------------------------------------------------------
+
+/// Run a DS ROM (.nds/.srl) directly via melonDS
+bool az_run_twl(const char* path);
+
+/// Run DS firmware boot (NDS BIOS boot, no ROM required)
+bool az_run_twl_ds_firmware(void);
+
+/// Run DSi NAND boot with the given NAND image file
+bool az_run_twl_dsi_nand(const char* nand_path);
+
+/// Check if a TWL launch is pending (Home Menu -> TWL FIRM transition)
+bool az_check_twl_launch(void);
+
+/// Set melonDS BIOS file paths
+void az_set_melonds_bios(int type, const char* path);
+
+/// Get melonDS BIOS file path (type: 0=ARM9, 1=ARM7, 2=ARM9i, 3=ARM7i)
+const char* az_get_melonds_bios(int type);
+
+/// Get list of titles installed on a DSi NAND image
+/// Returns number of titles written to out_buf. Pass NULL to get count.
+int az_get_dsi_nand_titles(const char* nand_path, const char** out_buf, int max_count);
 
 #ifdef __cplusplus
 }

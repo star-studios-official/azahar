@@ -25,6 +25,8 @@
 #include "src/SPI_Firmware.h"
 #include "src/Platform.h"
 #include "src/GBACart.h"
+#include "src/DSi_NAND.h"
+#include "src/DSi.h"
 #include "src/net/Net.h"
 #include "src/net/Net_Slirp.h"
 
@@ -858,6 +860,263 @@ bool Core::SaveDSSave(const std::string& save_path) {
     }
     fclose(f);
     return true;
+}
+
+bool Core::InitializeDSFirmware() {
+    LOG_INFO(TWL, "Initializing DS firmware boot (NDS mode)");
+
+    // Set up platform state
+    g_platform_state.base_path = FileUtil::GetUserPath(FileUtil::UserPath::AppDir);
+    g_platform_state.stop_callback = [this]() {
+        stop_requested = true;
+    };
+
+    // Use NDS BIOS files if available, otherwise FreeBIOS
+    impl->nds_args = melonDS::NDSArgs{};
+
+    // Load real NDS BIOS if available
+    std::string bios9_path = g_platform_state.base_path + "/melonDS/bios9.bin";
+    std::string bios7_path = g_platform_state.base_path + "/melonDS/bios7.bin";
+
+    if (FileUtil::Exists(bios9_path)) {
+        auto bios9 = std::make_unique<melonDS::ARM9BIOSImage>();
+        FILE* f = fopen(bios9_path.c_str(), "rb");
+        if (f) {
+            fread(bios9->data(), 1, bios9->size(), f);
+            fclose(f);
+            impl->nds_args.ARM9BIOS = std::move(bios9);
+            LOG_INFO(TWL, "Loaded NDS ARM9 BIOS: {}", bios9_path);
+        }
+    }
+
+    if (FileUtil::Exists(bios7_path)) {
+        auto bios7 = std::make_unique<melonDS::ARM7BIOSImage>();
+        FILE* f = fopen(bios7_path.c_str(), "rb");
+        if (f) {
+            fread(bios7->data(), 1, bios7->size(), f);
+            fclose(f);
+            impl->nds_args.ARM7BIOS = std::move(bios7);
+            LOG_INFO(TWL, "Loaded NDS ARM7 BIOS: {}", bios7_path);
+        }
+    }
+
+    // Create NDS instance
+    try {
+        impl->nds = std::make_unique<melonDS::NDS>(std::move(impl->nds_args));
+    } catch (const std::exception& e) {
+        error_message = std::string("Failed to create NDS instance: ") + e.what();
+        LOG_ERROR(TWL, "{}", error_message);
+        return false;
+    }
+
+    // No ROM inserted - boot firmware directly
+    dsi_mode = false;
+
+    // Set up networking
+    g_platform_state.net.RegisterInstance(0);
+    {
+        auto send_callback = [](const u8* data, int len) {
+            g_platform_state.net.RXEnqueue(data, len);
+        };
+        auto driver = std::make_unique<melonDS::Net_Slirp>(send_callback);
+        g_platform_state.net.SetDriver(std::move(driver));
+    }
+    g_platform_state.net_initialized = true;
+
+    LOG_INFO(TWL, "DS firmware boot initialized successfully");
+    initialized = true;
+    return true;
+}
+
+bool Core::InitializeDSiNAND(const std::string& nand_path) {
+    LOG_INFO(TWL, "Initializing DSi NAND boot: {}", nand_path);
+
+    if (!FileUtil::Exists(nand_path)) {
+        error_message = "DSi NAND file not found: " + nand_path;
+        LOG_ERROR(TWL, "{}", error_message);
+        return false;
+    }
+
+    // Set up platform state
+    g_platform_state.base_path = FileUtil::GetUserPath(FileUtil::UserPath::AppDir);
+    g_platform_state.stop_callback = [this]() {
+        stop_requested = true;
+    };
+
+    // Open the NAND file
+    Platform::FileHandle* nand_file = Platform::OpenFile(nand_path, Platform::FileMode::Read);
+    if (!nand_file) {
+        error_message = "Failed to open DSi NAND: " + nand_path;
+        LOG_ERROR(TWL, "{}", error_message);
+        return false;
+    }
+
+    // The NAND image needs the eMMC CID for crypto.
+    // Read the nocash footer to get it.
+    // The footer is at the end of the file: "DSi eMMC CID/CPU" + 16 bytes CID + 8 bytes ConsoleID
+    Platform::FileSeek(nand_file, -0x40, Platform::FileSeekOrigin::End);
+    char footer_check[16];
+    Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
+
+    DSi_NAND::DSiKey es_keyY{};
+    if (memcmp(footer_check, "DSi eMMC CID/CPU", 16) == 0) {
+        Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
+        LOG_INFO(TWL, "Read eMMC CID from nocash footer");
+    } else {
+        // Try the alternate footer location
+        Platform::FileSeek(nand_file, 0x000FF800, Platform::FileSeekOrigin::Start);
+        Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
+        if (memcmp(footer_check, "DSi eMMC CID/CPU", 16) == 0) {
+            Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
+            LOG_INFO(TWL, "Read eMMC CID from alternate footer location");
+        } else {
+            Platform::CloseFile(nand_file);
+            error_message = "DSi NAND missing nocash footer";
+            LOG_ERROR(TWL, "{}", error_message);
+            return false;
+        }
+    }
+
+    // Create NAND image
+    DSi_NAND::NANDImage nand_img(nand_file, es_keyY);
+    if (!nand_img) {
+        Platform::CloseFile(nand_file);
+        error_message = "Failed to initialize DSi NAND crypto";
+        LOG_ERROR(TWL, "{}", error_message);
+        return false;
+    }
+
+    // Set up DSi args
+    auto dsi_args = std::make_unique<melonDS::DSiArgs>();
+    dsi_args->NANDImage = std::move(nand_img);
+
+    // Load DSi BIOS files if available
+    std::string arm9i_path = g_platform_state.base_path + "/melonDS/bios9i.bin";
+    std::string arm7i_path = g_platform_state.base_path + "/melonDS/bios7i.bin";
+    std::string arm9_path = g_platform_state.base_path + "/melonDS/bios9.bin";
+    std::string arm7_path = g_platform_state.base_path + "/melonDS/bios7.bin";
+
+    if (FileUtil::Exists(arm9i_path)) {
+        auto bios = std::make_unique<melonDS::DSiBIOSImage>();
+        FILE* f = fopen(arm9i_path.c_str(), "rb");
+        if (f) { fread(bios->data(), 1, bios->size(), f); fclose(f); }
+        dsi_args->ARM9iBIOS = std::move(bios);
+    }
+    if (FileUtil::Exists(arm7i_path)) {
+        auto bios = std::make_unique<melonDS::DSiBIOSImage>();
+        FILE* f = fopen(arm7i_path.c_str(), "rb");
+        if (f) { fread(bios->data(), 1, bios->size(), f); fclose(f); }
+        dsi_args->ARM7iBIOS = std::move(bios);
+    }
+    if (FileUtil::Exists(arm9_path)) {
+        auto bios = std::make_unique<melonDS::ARM9BIOSImage>();
+        FILE* f = fopen(arm9_path.c_str(), "rb");
+        if (f) { fread(bios->data(), 1, bios->size(), f); fclose(f); }
+        dsi_args->ARM9BIOS = std::move(bios);
+    }
+    if (FileUtil::Exists(arm7_path)) {
+        auto bios = std::make_unique<melonDS::ARM7BIOSImage>();
+        FILE* f = fopen(arm7_path.c_str(), "rb");
+        if (f) { fread(bios->data(), 1, bios->size(), f); fclose(f); }
+        dsi_args->ARM7BIOS = std::move(bios);
+    }
+
+    // Create DSi instance
+    try {
+        impl->nds = std::make_unique<melonDS::DSi>(std::move(*dsi_args));
+    } catch (const std::exception& e) {
+        error_message = std::string("Failed to create DSi instance: ") + e.what();
+        LOG_ERROR(TWL, "{}", error_message);
+        return false;
+    }
+
+    dsi_mode = true;
+
+    // Set up networking
+    g_platform_state.net.RegisterInstance(0);
+    {
+        auto send_callback = [](const u8* data, int len) {
+            g_platform_state.net.RXEnqueue(data, len);
+        };
+        auto driver = std::make_unique<melonDS::Net_Slirp>(send_callback);
+        g_platform_state.net.SetDriver(std::move(driver));
+    }
+    g_platform_state.net_initialized = true;
+
+    LOG_INFO(TWL, "DSi NAND boot initialized successfully");
+    initialized = true;
+    return true;
+}
+
+std::vector<std::string> Core::GetDSiNANDTitles(const std::string& nand_path) {
+    std::vector<std::string> titles;
+
+    if (!FileUtil::Exists(nand_path))
+        return titles;
+
+    Platform::FileHandle* nand_file = Platform::OpenFile(nand_path, Platform::FileMode::Read);
+    if (!nand_file)
+        return titles;
+
+    // Read nocash footer to get eMMC CID
+    Platform::FileSeek(nand_file, -0x40, Platform::FileSeekOrigin::End);
+    char footer_check[16];
+    Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
+
+    DSi_NAND::DSiKey es_keyY{};
+    if (memcmp(footer_check, "DSi eMMC CID/CPU", 16) == 0) {
+        Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
+    } else {
+        Platform::FileSeek(nand_file, 0x000FF800, Platform::FileSeekOrigin::Start);
+        Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
+        if (memcmp(footer_check, "DSi eMMC CID/CPU", 16) == 0) {
+            Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
+        } else {
+            Platform::CloseFile(nand_file);
+            return titles;
+        }
+    }
+
+    DSi_NAND::NANDImage nand_img(nand_file, es_keyY);
+    if (!nand_img) {
+        Platform::CloseFile(nand_file);
+        return titles;
+    }
+
+    DSi_NAND::NANDMount mount(nand_img);
+    if (!mount) {
+        return titles;
+    }
+
+    // List titles in category 0x0003 (DSi system apps) and 0x0001 (user apps)
+    std::vector<u32> title_list;
+    mount.ListTitles(0x0003, title_list); // DSi system titles
+    mount.ListTitles(0x0001, title_list); // User titles
+
+    for (u32 titleid : title_list) {
+        NDSHeader header{};
+        NDSBanner banner{};
+        u32 version = 0;
+        mount.GetTitleInfo(0x0003, titleid, version, &header, &banner);
+
+        // Extract game title from banner
+        char16_t title_buf[128]{};
+        memcpy(title_buf, banner.TotalROMByteLength ? banner.GameName : header.GameTitle, sizeof(header.GameTitle));
+
+        std::string title_str;
+        for (int i = 0; i < 128 && title_buf[i]; i++) {
+            char c = static_cast<char>(title_buf[i]);
+            if (c >= 0x20) title_str += c;
+        }
+
+        if (!title_str.empty()) {
+            char id_buf[16]{};
+            snprintf(id_buf, sizeof(id_buf), "[%08X]", titleid);
+            titles.push_back(std::string(id_buf) + " " + title_str);
+        }
+    }
+
+    return titles;
 }
 
 } // namespace TWL

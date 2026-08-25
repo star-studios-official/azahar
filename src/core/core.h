@@ -171,16 +171,46 @@ public:
     /// Request a TWL (DS/DSi) game launch via melonDS
     void RequestTWLLaunch(const std::string& nds_rom_path) {
         m_pending_twl_rom = nds_rom_path;
+        m_pending_twl_mode = TWLLaunchMode::ROM;
         SendSignal(Signal::Shutdown);
     }
+
+    /// Request a DS firmware boot via melonDS (no ROM)
+    void RequestTWLFirmwareBoot() {
+        m_pending_twl_mode = TWLLaunchMode::DSFirmware;
+        SendSignal(Signal::Shutdown);
+    }
+
+    /// Request a DSi NAND boot via melonDS
+    void RequestDSiNANDBoot(const std::string& nand_path) {
+        m_pending_twl_dsi_nand = nand_path;
+        m_pending_twl_mode = TWLLaunchMode::DSiNAND;
+        SendSignal(Signal::Shutdown);
+    }
+
+    enum class TWLLaunchMode { None, ROM, DSFirmware, DSiNAND };
+
+    /// Get the pending TWL launch mode
+    TWLLaunchMode GetPendingTWLMode() const { return m_pending_twl_mode; }
 
     /// Get the pending TWL ROM path (cleared after read)
     std::string TakePendingTWLPath() {
         return std::move(m_pending_twl_rom);
     }
 
+    /// Get the pending DSi NAND path (cleared after read)
+    std::string TakePendingDSiNANDPath() {
+        return std::move(m_pending_twl_dsi_nand);
+    }
+
     /// Start the TWL (melonDS) emulation core for a given ROM
     bool StartTWLCore(const std::string& nds_rom_path);
+
+    /// Start the TWL emulation core in DS firmware boot mode
+    bool StartTWLFirmwareCore();
+
+    /// Start the TWL emulation core in DSi NAND boot mode
+    bool StartTWLDSiNANDCore(const std::string& nand_path);
 
     /// Stop the TWL emulation core
     void StopTWLCore();
@@ -356,6 +386,10 @@ public:
 
     [[nodiscard]] const std::string& GetStatusDetails() const {
         return status_details;
+    }
+
+    [[nodiscard]] ResultStatus GetStatus() const {
+        return status;
     }
 
     [[nodiscard]] Loader::AppLoader& GetAppLoader() const {
@@ -562,6 +596,8 @@ private:
     std::string m_chainloadpath;
     std::optional<u8> m_mem_mode;
     std::string m_pending_twl_rom; ///< Pending TWL ROM path for DS/DSi game launch via melonDS
+    std::string m_pending_twl_dsi_nand; ///< Pending DSi NAND path for DSi boot
+    TWLLaunchMode m_pending_twl_mode = TWLLaunchMode::None;
     std::unique_ptr<class TWL::Core> m_twl_core; ///< melonDS-based TWL emulation core
     u64 title_id;
 

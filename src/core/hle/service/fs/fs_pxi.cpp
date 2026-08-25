@@ -9,6 +9,7 @@
 #include <cryptopp/cmac.h>
 #include <cryptopp/sha.h>
 #include "common/archives.h"
+#include "common/file_util.h"
 #include "common/logging/log.h"
 #include "common/settings.h"
 #include "core/core.h"
@@ -55,6 +56,8 @@ FS_PXI::FS_PXI(Core::System& system)
         {0x001C, &FS_PXI::IsSdmcDetected, "IsSdmcDetected"},
         {0x001D, &FS_PXI::IsSdmcWritable, "IsSdmcWritable"},
         {0x0026, &FS_PXI::CardSlotIsInserted, "CardSlotIsInserted"},
+        {0x003B, &FS_PXI::GetLegacyRomHeader, "GetLegacyRomHeader"},
+        {0x003C, &FS_PXI::GetLegacyBannerData, "GetLegacyBannerData"},
         // clang-format on
     };
     RegisterHandlers(functions);
@@ -576,6 +579,81 @@ void FS_PXI::CardSlotIsInserted(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
     rb.Push(ResultSuccess);
     rb.Push(!system.GetCartridge().empty());
+}
+
+void FS_PXI::GetLegacyRomHeader(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const auto media_type = rp.PopEnum<MediaType>();
+    const auto title_id = rp.Pop<u64>();
+    rp.Pop<u32>(); // reserved
+    auto output = rp.PopMappedBuffer();
+
+    constexpr u32 NDS_HEADER_SIZE = 0x3B4;
+    std::vector<u8> header(NDS_HEADER_SIZE, 0);
+
+    bool success = false;
+    if (media_type == MediaType::GameCard) {
+        const auto& cartridge = system.GetCartridge();
+        if (!cartridge.empty() && FileSys::IsNDSROM(cartridge)) {
+            FileUtil::IOFile file(cartridge, "rb");
+            if (file.IsOpen()) {
+                file.Seek(0, SEEK_SET);
+                success = file.ReadBytes(header.data(), NDS_HEADER_SIZE) == NDS_HEADER_SIZE;
+            }
+        }
+    }
+
+    if (success) {
+        output.Write(header.data(), 0, header.size());
+    }
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(success ? ResultSuccess : FileSys::ResultNotFound);
+
+    LOG_DEBUG(Service_FS, "GetLegacyRomHeader(PXI): media_type={}, title_id={:016X}, success={}",
+              static_cast<u8>(media_type), title_id, success);
+}
+
+void FS_PXI::GetLegacyBannerData(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const auto media_type = rp.PopEnum<MediaType>();
+    const auto title_id = rp.Pop<u64>();
+    rp.Pop<u32>(); // reserved
+    auto output = rp.PopMappedBuffer();
+
+    constexpr u32 BANNER_SIZE = 0x23C0;
+    std::vector<u8> banner(BANNER_SIZE, 0);
+
+    bool success = false;
+    if (media_type == MediaType::GameCard) {
+        const auto& cartridge = system.GetCartridge();
+        if (!cartridge.empty() && FileSys::IsNDSROM(cartridge)) {
+            FileUtil::IOFile file(cartridge, "rb");
+            if (file.IsOpen()) {
+                // Read NDS header to get banner offset
+                FileSys::NDSROMHeader nds_header{};
+                if (file.ReadBytes(&nds_header, sizeof(nds_header)) == sizeof(nds_header)) {
+                    const u32 banner_offset = nds_header.banner_offset;
+                    const u64 file_size = file.GetSize();
+                    if (banner_offset > 0 &&
+                        static_cast<u64>(banner_offset) + BANNER_SIZE <= file_size) {
+                        file.Seek(banner_offset, SEEK_SET);
+                        success = file.ReadBytes(banner.data(), BANNER_SIZE) == BANNER_SIZE;
+                    }
+                }
+            }
+        }
+    }
+
+    if (success) {
+        output.Write(banner.data(), 0, banner.size());
+    }
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(success ? ResultSuccess : FileSys::ResultNotFound);
+
+    LOG_DEBUG(Service_FS, "GetLegacyBannerData(PXI): media_type={}, title_id={:016X}, success={}",
+              static_cast<u8>(media_type), title_id, success);
 }
 
 template <class Archive>

@@ -43,6 +43,9 @@ struct MelonDSSettingsView: View {
     @AppStorage("melonds_screen_swap") private var screenSwap = false
     @AppStorage("melonds_screen_rotation") private var screenRotation = 0
 
+    // DSi NAND
+    @AppStorage("melonds_dsi_nand_path") private var dsiNANDPath = ""
+
     // SPI/Firmware
     @AppStorage("melonds_settings_file") private var settingsFilePath = ""
     @AppStorage("melonds_wifi_settings") private var wifiSettingsPath = ""
@@ -58,6 +61,7 @@ struct MelonDSSettingsView: View {
     @State private var showingDSSavePicker = false
     @State private var showingSettingsFilePicker = false
     @State private var showingWifiSettingsPicker = false
+    @State private var showingDSiNANDPicker = false
 
     // Saved state label
     @State private var savedStateInfo: String = ""
@@ -301,6 +305,71 @@ struct MelonDSSettingsView: View {
                 }
             }
 
+            // MARK: - DSi NAND
+            section("DSi NAND") {
+                biosRow(
+                    title: "DSi NAND Image",
+                    subtitle: dsiNANDPath.isEmpty ? "No NAND image selected" : fileName(from: dsiNANDPath),
+                    isPresent: !dsiNANDPath.isEmpty,
+                    showingPicker: $showingDSiNANDPicker,
+                    onClear: { dsiNANDPath = "" }
+                )
+
+                if !dsiNANDPath.isEmpty {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                        Text("NAND loaded: \(fileName(from: dsiNANDPath))")
+                            .font(.caption)
+                    }
+                }
+
+                Text("A DSi NAND image enables DSi-exclusive features: DSiWare titles, DSi Camera, DSi Sound, and DSi-exclusive apps. The NAND must have the nocash footer (DSi eMMC CID/CPU) and match the region BIOS files above.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            // MARK: - Boot Options
+            section("Boot Options") {
+                Button(action: {
+                    az_run_twl_ds_firmware()
+                }) {
+                    HStack {
+                        Image(systemName: "power")
+                            .foregroundStyle(.blue)
+                        Text("Boot DS Firmware")
+                    }
+                }
+
+                Text("Boot into the Nintendo DS firmware menu (like inserting a DS into the 3DS). Requires DS BIOS files above.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if !dsiNANDPath.isEmpty {
+                    Button(action: {
+                        az_run_twl_dsi_nand(dsiNANDPath)
+                    }) {
+                        HStack {
+                            Image(systemName: "power")
+                                .foregroundStyle(.purple)
+                            Text("Boot DSi NAND")
+                        }
+                    }
+
+                    Text("Boot into the Nintendo DSi firmware using the NAND image above. This loads the DSi menu with installed DSiWare titles.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    HStack {
+                        Image(systemName: "lock.fill")
+                            .foregroundStyle(.secondary)
+                        Text("Select a DSi NAND image above to enable DSi NAND boot.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
             // MARK: - SPI / Firmware Settings
             section("Firmware Settings") {
                 biosRow(
@@ -395,6 +464,15 @@ struct MelonDSSettingsView: View {
             ],
             allowsMultipleSelection: false
         ) { result in handleDSSaveResult(result) }
+        // DSi NAND picker
+        .fileImporter(
+            isPresented: $showingDSiNANDPicker,
+            allowedContentTypes: [
+                UTType(filenameExtension: "bin") ?? .data,
+                .data
+            ],
+            allowsMultipleSelection: false
+        ) { result in handleBIOSResult(result, pathBinding: $dsiNANDPath) }
         // SPI/WiFi settings pickers
         .fileImporter(
             isPresented: $showingSettingsFilePicker,

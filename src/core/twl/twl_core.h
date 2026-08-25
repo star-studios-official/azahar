@@ -122,6 +122,18 @@ public:
     /// Save the current DS save to a file
     bool SaveDSSave(const std::string& save_path);
 
+    /// Boot into DS firmware mode (NDS BIOS boot, no ROM required)
+    bool InitializeDSFirmware();
+
+    /// Boot into DSi mode with a NAND image
+    bool InitializeDSiNAND(const std::string& nand_path);
+
+    /// Get list of titles installed on a DSi NAND
+    static std::vector<std::string> GetDSiNANDTitles(const std::string& nand_path);
+
+    /// Check if this core was initialized in DSi mode
+    bool IsDSiMode() const { return dsi_mode; }
+
 private:
     /// Emulation loop (runs in background thread)
     void RunLoop();
@@ -155,6 +167,7 @@ private:
     struct Impl;
     std::unique_ptr<Impl> impl;
     bool networking_enabled = true;
+    bool dsi_mode = false;
 };
 
 } // namespace TWL

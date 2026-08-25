@@ -128,6 +128,9 @@ System::ResultStatus System::RunLoop(bool tight_loop) {
         return ResultStatus::Success;
     }
     case Signal::Shutdown:
+        if (m_pending_twl_mode != TWLLaunchMode::None) {
+            return ResultStatus::TWLLaunchRequested;
+        }
         return ResultStatus::ShutdownRequested;
     case Signal::Load: {
         if (save_state_request_status != SaveStateStatus::NONE) {
@@ -1021,6 +1024,50 @@ bool System::StartTWLCore(const std::string& nds_rom_path) {
 
     m_twl_core->Start();
     LOG_INFO(Core, "TWL core started successfully");
+    return true;
+}
+
+bool System::StartTWLFirmwareCore() {
+    LOG_INFO(Core, "Starting TWL (melonDS) DS firmware boot");
+
+    StopTWLCore();
+
+    m_twl_core = std::make_unique<TWL::Core>();
+    if (!m_twl_core->InitializeDSFirmware()) {
+        LOG_ERROR(Core, "Failed to initialize DS firmware: {}", m_twl_core->GetError());
+        m_twl_core.reset();
+        return false;
+    }
+
+    m_twl_core->SetStopCallback([this]() {
+        LOG_INFO(Core, "TWL core signaled stop");
+        RequestShutdown();
+    });
+
+    m_twl_core->Start();
+    LOG_INFO(Core, "DS firmware boot started successfully");
+    return true;
+}
+
+bool System::StartTWLDSiNANDCore(const std::string& nand_path) {
+    LOG_INFO(Core, "Starting TWL (melonDS) DSi NAND boot: {}", nand_path);
+
+    StopTWLCore();
+
+    m_twl_core = std::make_unique<TWL::Core>();
+    if (!m_twl_core->InitializeDSiNAND(nand_path)) {
+        LOG_ERROR(Core, "Failed to initialize DSi NAND: {}", m_twl_core->GetError());
+        m_twl_core.reset();
+        return false;
+    }
+
+    m_twl_core->SetStopCallback([this]() {
+        LOG_INFO(Core, "TWL core signaled stop");
+        RequestShutdown();
+    });
+
+    m_twl_core->Start();
+    LOG_INFO(Core, "DSi NAND boot started successfully");
     return true;
 }
 

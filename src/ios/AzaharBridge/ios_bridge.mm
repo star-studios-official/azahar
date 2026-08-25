@@ -42,6 +42,7 @@
 #include "core/hle/service/nfc/nfc.h"
 #include "core/hw/aes/key.h"
 #include "core/hw/unique_data.h"
+#include "core/file_sys/nds_rom.h"
 #include "core/loader/loader.h"
 #include "core/loader/smdh.h"
 #include "core/savestate.h"
@@ -356,59 +357,72 @@ static void RunCitra(const std::string& filepath) {
             if (result == Core::System::ResultStatus::Success) {
                 continue;
             }
-            if (result == Core::System::ResultStatus::ShutdownRequested) {
-                // Check if this is a TWL FIRM launch (DS/DSi game)
+            if (result == Core::System::ResultStatus::TWLLaunchRequested || result == Core::System::ResultStatus::ShutdownRequested) {
+                // Check if this is a TWL FIRM launch (DS/DSi game, firmware, or NAND)
                 auto twl_path = system.TakePendingTWLPath();
-                if (!twl_path.empty()) {
-                    LOG_INFO(Frontend, "TWL FIRM launch requested, starting melonDS for: {}", twl_path);
+                auto dsi_nand_path = system.TakePendingDSiNANDPath();
+                auto twl_mode = system.GetPendingTWLMode();
 
-                    // Start the melonDS TWL core
-                    if (system.StartTWLCore(twl_path)) {
-                        LOG_INFO(Frontend, "melonDS core started, running TWL emulation loop");
-
-                        auto* twl = system.GetTWLCore();
-
-                        // Reset TWL input state
-                        twl_button_state.store(0);
-                        twl_touch_pressed.store(false);
-                        twl_touch_active.store(false);
-
-                        // Start TWL audio output via AudioUnit
-                        twl_audio_start();
-                        twl->SetAudioCallback(twl_audio_push_samples);
-                        LOG_INFO(Frontend, "TWL audio callback set (rate={})", twl->GetAudioSampleRate());
-
-                        // Run melonDS frames until it stops
-                        while (!stop_run) {
-                            if (!twl || !twl->IsRunning()) {
-                                LOG_INFO(Frontend, "melonDS core stopped");
-                                break;
-                            }
-
-                            // Forward input from Azahar HID to melonDS
-                            twl->SetButtonState(twl_button_state.load());
-                            if (twl_touch_active.load()) {
-                                TWL::TouchState touch;
-                                touch.pressed = twl_touch_pressed.load();
-                                touch.x = static_cast<u16>(twl_touch_x.load());
-                                touch.y = static_cast<u16>(twl_touch_y.load());
-                                twl->SetTouchState(touch);
-                            }
-                        }
-
-                        twl_audio_stop();
-                        system.StopTWLCore();
-                        LOG_INFO(Frontend, "melonDS emulation ended, returning to 3DS");
-                        // Resume 3DS emulation (go back to Home Menu)
-                        continue;
-                    } else {
-                        LOG_ERROR(Frontend, "Failed to start melonDS core");
-                    }
+                bool twl_started = false;
+                if (twl_mode == Core::System::TWLLaunchMode::ROM && !twl_path.empty()) {
+                    LOG_INFO(Frontend, "TWL FIRM launch requested (ROM), starting melonDS for: {}", twl_path);
+                    twl_started = system.StartTWLCore(twl_path);
+                } else if (twl_mode == Core::System::TWLLaunchMode::DSFirmware) {
+                    LOG_INFO(Frontend, "TWL FIRM launch requested (DS firmware boot)");
+                    twl_started = system.StartTWLFirmwareCore();
+                } else if (twl_mode == Core::System::TWLLaunchMode::DSiNAND && !dsi_nand_path.empty()) {
+                    LOG_INFO(Frontend, "TWL FIRM launch requested (DSi NAND: {})", dsi_nand_path);
+                    twl_started = system.StartTWLDSiNANDCore(dsi_nand_path);
                 }
 
-                LOG_INFO(Frontend, "Shutdown requested by system");
-                last_result.store(static_cast<int>(result));
-                return;
+                if (twl_started) {
+                    LOG_INFO(Frontend, "melonDS core started, running TWL emulation loop");
+
+                    auto* twl = system.GetTWLCore();
+
+                    // Reset TWL input state
+                    twl_button_state.store(0);
+                    twl_touch_pressed.store(false);
+                    twl_touch_active.store(false);
+
+                    // Start TWL audio output via AudioUnit
+                    twl_audio_start();
+                    twl->SetAudioCallback(twl_audio_push_samples);
+                    LOG_INFO(Frontend, "TWL audio callback set (rate={})", twl->GetAudioSampleRate());
+
+                    // Run melonDS frames until it stops
+                    while (!stop_run) {
+                        if (!twl || !twl->IsRunning()) {
+                            LOG_INFO(Frontend, "melonDS core stopped");
+                            break;
+                        }
+
+                        // Forward input from Azahar HID to melonDS
+                        twl->SetButtonState(twl_button_state.load());
+                        if (twl_touch_active.load()) {
+                            TWL::TouchState touch;
+                            touch.pressed = twl_touch_pressed.load();
+                            touch.x = static_cast<u16>(twl_touch_x.load());
+                            touch.y = static_cast<u16>(twl_touch_y.load());
+                            twl->SetTouchState(touch);
+                        }
+                    }
+
+                    twl_audio_stop();
+                    system.StopTWLCore();
+                    LOG_INFO(Frontend, "melonDS emulation ended, returning to 3DS");
+                    // Resume 3DS emulation (go back to Home Menu)
+                    continue;
+                } else if (result == Core::System::ResultStatus::TWLLaunchRequested) {
+                    LOG_ERROR(Frontend, "Failed to start melonDS core for TWL launch");
+                }
+
+                if (result == Core::System::ResultStatus::ShutdownRequested) {
+                    LOG_INFO(Frontend, "Shutdown requested by system");
+                    last_result.store(static_cast<int>(result));
+                    return;
+                }
+                // For TWLLaunchRequested that failed, fall through to continue loop
             } else {
                 // Core error occurred
                 LOG_ERROR(Frontend, "Core error during RunLoop: {}", static_cast<u32>(result));
@@ -634,6 +648,109 @@ void az_run_twl(const char* nds_rom_path) {
     system.StopTWLCore();
     LOG_INFO(Frontend, "melonDS emulation ended");
     last_result.store(0);
+}
+
+/// Boot DS firmware (NDS BIOS boot, no ROM required).
+/// Called from Swift when user selects "Boot DS Firmware" in settings.
+void az_run_twl_firmware(void) {
+    LOG_INFO(Frontend, "Direct TWL firmware boot (NDS mode)");
+
+    Core::System& system = Core::System::GetInstance();
+    g_active_system = &system;
+    SCOPE_EXIT({ g_active_system = nullptr; });
+
+    if (!system.StartTWLFirmware()) {
+        LOG_ERROR(Frontend, "Failed to start DS firmware boot");
+        last_result.store(AZ_CORE_ERROR_UNKNOWN);
+        return;
+    }
+
+    LOG_INFO(Frontend, "DS firmware boot started, running emulation loop");
+
+    auto* twl = system.GetTWLCore();
+    twl_button_state.store(0);
+    twl_touch_pressed.store(false);
+    twl_touch_active.store(false);
+    twl->SetAudioCallback(twl_audio_push_samples);
+    twl_audio_start();
+
+    while (!stop_run) {
+        if (!twl || !twl->IsRunning()) break;
+        twl->SetButtonState(twl_button_state.load());
+        if (twl_touch_active.load()) {
+            TWL::TouchState touch;
+            touch.pressed = twl_touch_pressed.load();
+            touch.x = static_cast<u16>(twl_touch_x.load());
+            touch.y = static_cast<u16>(twl_touch_y.load());
+            twl->SetTouchState(touch);
+        }
+    }
+
+    twl_audio_stop();
+    system.StopTWLCore();
+    LOG_INFO(Frontend, "DS firmware boot ended");
+    last_result.store(0);
+}
+
+/// Boot DSi mode with a NAND image.
+/// Called from Swift when user selects a DSi NAND file.
+void az_run_twl_dsi_nand(const char* nand_path) {
+    if (!nand_path || !*nand_path) {
+        LOG_ERROR(Frontend, "az_run_twl_dsi_nand called with null/empty path");
+        last_result.store(AZ_CORE_ERROR_UNKNOWN);
+        return;
+    }
+
+    LOG_INFO(Frontend, "Direct TWL DSi NAND boot: {}", nand_path);
+
+    Core::System& system = Core::System::GetInstance();
+    g_active_system = &system;
+    SCOPE_EXIT({ g_active_system = nullptr; });
+
+    if (!system.StartTWLDSiNAND(nand_path)) {
+        LOG_ERROR(Frontend, "Failed to start DSi NAND boot for: {}", nand_path);
+        last_result.store(AZ_CORE_ERROR_UNKNOWN);
+        return;
+    }
+
+    LOG_INFO(Frontend, "DSi NAND boot started, running emulation loop");
+
+    auto* twl = system.GetTWLCore();
+    twl_button_state.store(0);
+    twl_touch_pressed.store(false);
+    twl_touch_active.store(false);
+    twl->SetAudioCallback(twl_audio_push_samples);
+    twl_audio_start();
+
+    while (!stop_run) {
+        if (!twl || !twl->IsRunning()) break;
+        twl->SetButtonState(twl_button_state.load());
+        if (twl_touch_active.load()) {
+            TWL::TouchState touch;
+            touch.pressed = twl_touch_pressed.load();
+            touch.x = static_cast<u16>(twl_touch_x.load());
+            touch.y = static_cast<u16>(twl_touch_y.load());
+            twl->SetTouchState(touch);
+        }
+    }
+
+    twl_audio_stop();
+    system.StopTWLCore();
+    LOG_INFO(Frontend, "DSi NAND boot ended");
+    last_result.store(0);
+}
+
+/// Get list of titles on a DSi NAND (returns newline-separated string).
+static std::string dsi_nand_titles_cache;
+const char* az_get_dsi_nand_titles(const char* nand_path) {
+    if (!nand_path) return nullptr;
+    auto titles = TWL::Core::GetDSiNANDTitles(nand_path);
+    dsi_nand_titles_cache.clear();
+    for (const auto& t : titles) {
+        if (!dsi_nand_titles_cache.empty()) dsi_nand_titles_cache += '\n';
+        dsi_nand_titles_cache += t;
+    }
+    return dsi_nand_titles_cache.c_str();
 }
 
 void az_run(const char* path) {
@@ -1096,11 +1213,260 @@ int64_t az_get_title_id(const char* path) {
     return static_cast<int64_t>(title_id);
 }
 
+// NDS banner icon extraction (4bpp palette-based 32x32 icon → 48x48 RGB565)
+// Based on melonDS romIcon() from EmuInstance.cpp
+static int ExtractNDSBannerIcon(const char* path, uint16_t* out_icon_data, int buffer_size) {
+    if (!path || !out_icon_data || buffer_size < 48 * 48) {
+        return 0;
+    }
+
+    FileUtil::IOFile file(path, "rb");
+    if (!file.IsOpen()) {
+        return 0;
+    }
+
+    // Read NDS header (first 4096 bytes)
+    FileSys::NDSROMHeader nds_header{};
+    if (file.ReadBytes(&nds_header, sizeof(nds_header)) != sizeof(nds_header)) {
+        return 0;
+    }
+
+    // Check banner offset
+    u32 banner_offset = nds_header.banner_offset;
+    if (banner_offset == 0) {
+        return 0;
+    }
+
+    // Read banner (9152 bytes = NDSBanner size)
+    // Layout: u16 Version, u16 CRC16[4], u8 Reserved[22], u8 Icon[512], u16 Palette[16], ...
+    constexpr u32 NDS_BANNER_HEADER_SIZE = 32; // Version(2) + CRC(8) + Reserved(22)
+    constexpr u32 ICON_OFFSET = NDS_BANNER_HEADER_SIZE;      // 32
+    constexpr u32 PALETTE_OFFSET = ICON_OFFSET + 512;         // 544
+    constexpr u32 BANNER_SIZE = 9152;
+
+    std::vector<u8> banner_data(BANNER_SIZE, 0);
+    file.Seek(banner_offset, SEEK_SET);
+    if (file.ReadBytes(banner_data.data(), BANNER_SIZE) != BANNER_SIZE) {
+        return 0;
+    }
+
+    // Extract palette (16 × RGB565)
+    uint16_t palette_rgb565[16];
+    std::memcpy(palette_rgb565, banner_data.data() + PALETTE_OFFSET, sizeof(palette_rgb565));
+
+    // Convert palette to RGB565 (keep as-is since game library expects RGB565)
+    // Palette index 0 is transparent
+    uint16_t palette[16];
+    for (int i = 0; i < 16; i++) {
+        if (i == 0) {
+            palette[i] = 0x0000; // transparent (black with alpha=0)
+        } else {
+            palette[i] = palette_rgb565[i];
+        }
+    }
+
+    // Decode 4bpp icon (32×32) to RGB565
+    // NDS icon data is organized in 8×8 tiles, 4 tiles across, 4 tiles down
+    uint16_t icon_32x32[32 * 32];
+    const u8* icon_data = banner_data.data() + ICON_OFFSET;
+    int count = 0;
+    for (int ytile = 0; ytile < 4; ytile++) {
+        for (int xtile = 0; xtile < 4; xtile++) {
+            for (int ypixel = 0; ypixel < 8; ypixel++) {
+                for (int xpixel = 0; xpixel < 8; xpixel++) {
+                    u8 pal_index = (count % 2) ? (icon_data[count / 2] >> 4) : (icon_data[count / 2] & 0x0F);
+                    int x = xtile * 8 + xpixel;
+                    int y = ytile * 8 + ypixel;
+                    icon_32x32[y * 32 + x] = palette[pal_index];
+                    count++;
+                }
+            }
+        }
+    }
+
+    // Upscale 32×32 → 48×48 using nearest-neighbor
+    for (int dy = 0; dy < 48; dy++) {
+        for (int dx = 0; dx < 48; dx++) {
+            int sx = dx * 32 / 48;
+            int sy = dy * 32 / 48;
+            out_icon_data[dy * 48 + dx] = icon_32x32[sy * 32 + sx];
+        }
+    }
+
+    return 48 * 48;
+}
+
+// Extract DSi animated icon frames from NDS banner.
+// Returns the number of frames extracted (up to max_frames).
+// Each frame is 48×48 RGB565, written consecutively to out_frames.
+// out_sequence is filled with the animation sequence (frame indices + durations).
+static int ExtractNDSAnimatedIcon(const char* path, uint16_t* out_frames,
+                                  int max_frames, int* out_frame_count) {
+    if (!path || !out_frames || max_frames <= 0) {
+        return 0;
+    }
+
+    FileUtil::IOFile file(path, "rb");
+    if (!file.IsOpen()) {
+        return 0;
+    }
+
+    FileSys::NDSROMHeader nds_header{};
+    if (file.ReadBytes(&nds_header, sizeof(nds_header)) != sizeof(nds_header)) {
+        return 0;
+    }
+
+    u32 banner_offset = nds_header.banner_offset;
+    if (banner_offset == 0) {
+        return 0;
+    }
+
+    constexpr u32 BANNER_SIZE = 9152;
+    std::vector<u8> banner_data(BANNER_SIZE, 0);
+    file.Seek(banner_offset, SEEK_SET);
+    if (file.ReadBytes(banner_data.data(), BANNER_SIZE) != BANNER_SIZE) {
+        return 0;
+    }
+
+    // Check banner version: 0x0103 = DSi with animation
+    uint16_t version;
+    std::memcpy(&version, banner_data.data(), sizeof(version));
+    if (version != 0x0103) {
+        return 0; // Not a DSi banner
+    }
+
+    // DSi icon data: 8 frames × 512 bytes each, at offset 32+512+16*2+8*128*2+2048 = 4608
+    constexpr u32 DSICON_OFFSET = 4608;
+    constexpr u32 DSIPAL_OFFSET = DSICON_OFFSET + 8 * 512;    // 8640
+    constexpr u32 DSISEQ_OFFSET = DSIPAL_OFFSET + 8 * 16 * 2; // 8896
+
+    // Decode each of the 8 possible bitmap frames
+    uint16_t decoded_frames[8][32 * 32];
+    for (int frame = 0; frame < 8; frame++) {
+        // Extract palette for this frame
+        uint16_t palette[16];
+        const u16* pal_src = reinterpret_cast<const u16*>(
+            banner_data.data() + DSIPAL_OFFSET + frame * 16 * 2);
+        for (int i = 0; i < 16; i++) {
+            palette[i] = (i == 0) ? 0x0000 : pal_src[i];
+        }
+
+        const u8* frame_data = banner_data.data() + DSICON_OFFSET + frame * 512;
+        int count = 0;
+        for (int ytile = 0; ytile < 4; ytile++) {
+            for (int xtile = 0; xtile < 4; xtile++) {
+                for (int ypixel = 0; ypixel < 8; ypixel++) {
+                    for (int xpixel = 0; xpixel < 8; xpixel++) {
+                        u8 pal_index = (count % 2) ? (frame_data[count / 2] >> 4)
+                                                   : (frame_data[count / 2] & 0x0F);
+                        int x = xtile * 8 + xpixel;
+                        int y = ytile * 8 + ypixel;
+                        decoded_frames[frame][y * 32 + x] = palette[pal_index];
+                        count++;
+                    }
+                }
+            }
+        }
+    }
+
+    // Read animation sequence
+    const uint16_t* sequence = reinterpret_cast<const uint16_t*>(
+        banner_data.data() + DSISEQ_OFFSET);
+
+    // SEQ macros (from melonDS)
+    auto SEQ_FLIPH = [](uint16_t v) { return (v >> 15) & 1; };
+    auto SEQ_FLIPV = [](uint16_t v) { return (v >> 14) & 1; };
+    auto SEQ_BMP   = [](uint16_t v) { return (v >> 8) & 7; };
+    auto SEQ_PAL   = [](uint16_t v) { return (v >> 11) & 7; };
+    auto SEQ_DUR   = [](uint16_t v) { return v & 0xFF; };
+
+    int frames_written = 0;
+    for (int i = 0; i < 64 && frames_written < max_frames; i++) {
+        if (sequence[i] == 0) break;
+
+        int bmp_idx = SEQ_BMP(sequence[i]);
+        int pal_idx = SEQ_PAL(sequence[i]);
+        int dur = SEQ_DUR(sequence[i]);
+        if (dur == 0) dur = 1;
+
+        // Decode this frame with its specific palette
+        uint16_t temp_frame[32 * 32];
+        {
+            uint16_t palette[16];
+            const u16* pal_src = reinterpret_cast<const u16*>(
+                banner_data.data() + DSIPAL_OFFSET + pal_idx * 16 * 2);
+            for (int j = 0; j < 16; j++) {
+                palette[j] = (j == 0) ? 0x0000 : pal_src[j];
+            }
+            const u8* frame_data = banner_data.data() + DSICON_OFFSET + bmp_idx * 512;
+            int count = 0;
+            for (int ytile = 0; ytile < 4; ytile++) {
+                for (int xtile = 0; xtile < 4; xtile++) {
+                    for (int ypixel = 0; ypixel < 8; ypixel++) {
+                        for (int xpixel = 0; xpixel < 8; xpixel++) {
+                            u8 pal_index = (count % 2) ? (frame_data[count / 2] >> 4)
+                                                       : (frame_data[count / 2] & 0x0F);
+                            int x = xtile * 8 + xpixel;
+                            int y = ytile * 8 + ypixel;
+                            temp_frame[y * 32 + x] = palette[pal_index];
+                            count++;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Apply flip
+        if (SEQ_FLIPH(sequence[i])) {
+            for (int y = 0; y < 32; y++) {
+                for (int x = 0; x < 16; x++) {
+                    std::swap(temp_frame[y * 32 + x], temp_frame[y * 32 + (31 - x)]);
+                }
+            }
+        }
+        if (SEQ_FLIPV(sequence[i])) {
+            for (int y = 0; y < 16; y++) {
+                for (int x = 0; x < 32; x++) {
+                    std::swap(temp_frame[y * 32 + x], temp_frame[(31 - y) * 32 + x]);
+                }
+            }
+        }
+
+        // Write this frame (duplicated for duration) as 48×48 RGB565
+        uint16_t* dst = out_frames + frames_written * 48 * 48;
+        for (int dy = 0; dy < 48; dy++) {
+            for (int dx = 0; dx < 48; dx++) {
+                int sx = dx * 32 / 48;
+                int sy = dy * 32 / 48;
+                dst[dy * 48 + dx] = temp_frame[sy * 32 + sx];
+            }
+        }
+
+        frames_written++;
+    }
+
+    if (out_frame_count) {
+        *out_frame_count = frames_written;
+    }
+    return frames_written;
+}
+
 int az_get_game_icon(const char* path, uint16_t* out_icon_data, int buffer_size) {
     if (!path || !out_icon_data || buffer_size < 48 * 48) {
         return 0;
     }
 
+    // Try NDS ROM banner icon first (for .nds, .srl, .dsi files)
+    const std::string filepath(path);
+    const std::string ext = FileUtil::GetExtensionFromFilename(filepath);
+    if (ext == "nds" || ext == "srl" || ext == "dsi") {
+        int result = ExtractNDSBannerIcon(path, out_icon_data, buffer_size);
+        if (result > 0) {
+            return result;
+        }
+    }
+
+    // Fall back to3DS SMDH icon
     auto loader = Loader::GetLoader(path);
     if (!loader) {
         return 0;
@@ -1138,6 +1504,71 @@ int az_get_game_icon(const char* path, uint16_t* out_icon_data, int buffer_size)
 bool az_get_game_metadata(const char* path, az_game_metadata* out_metadata) {
     if (!path || !out_metadata) {
         return false;
+    }
+
+    // Try NDS banner first for .nds/.srl/.dsi files
+    const std::string filepath(path);
+    const std::string ext = FileUtil::GetExtensionFromFilename(filepath);
+    if (ext == "nds" || ext == "srl" || ext == "dsi") {
+        FileUtil::IOFile file(path, "rb");
+        if (file.IsOpen()) {
+            FileSys::NDSROMHeader nds_header{};
+            if (file.ReadBytes(&nds_header, sizeof(nds_header)) == sizeof(nds_header)) {
+                // Compute synthetic title ID from NDS game code
+                u32 game_code = FileSys::GetNDSGameCode(nds_header);
+                u64 synthetic_tid = FileSys::GetNDSSyntheticTitleID(nds_header);
+                out_metadata->title_id = synthetic_tid;
+
+                // Get playtime
+                if (play_time_manager) {
+                    out_metadata->play_time_seconds =
+                        static_cast<int64_t>(play_time_manager->GetPlayTime(synthetic_tid));
+                } else {
+                    out_metadata->play_time_seconds = 0;
+                }
+
+                // Read banner for title
+                u32 banner_offset = nds_header.banner_offset;
+                if (banner_offset > 0) {
+                    // EnglishTitle is at offset 32+512+16*2 + 0*128*2 = 0x240 in banner
+                    // Actually: Version(2)+CRC(8)+Reserved(22)+Icon(512)+Palette(32)+Titles
+                    // EnglishTitle is the 2nd title (index 1), each 128 char16_t = 256 bytes
+                    constexpr u32 TITLE_OFFSET = 32 + 512 + 16 * 2 + 1 * 128 * 2; // 0x240
+                    char16_t eng_title[128] = {};
+                    file.Seek(banner_offset + TITLE_OFFSET, SEEK_SET);
+                    if (file.ReadBytes(eng_title, sizeof(eng_title)) == sizeof(eng_title)) {
+                        std::string title_str = Common::UTF16ToUTF8(eng_title);
+                        if (!title_str.empty()) {
+                            strncpy(out_metadata->title, title_str.c_str(), 255);
+                            out_metadata->title[255] = '\0';
+                        } else {
+                            // Fall back to Japanese title (index 0)
+                            file.Seek(banner_offset + 32 + 512 + 16 * 2, SEEK_SET);
+                            file.ReadBytes(eng_title, sizeof(eng_title));
+                            title_str = Common::UTF16ToUTF8(eng_title);
+                            strncpy(out_metadata->title,
+                                    title_str.empty() ? FileUtil::GetFilename(path).c_str()
+                                                      : title_str.c_str(),
+                                    255);
+                            out_metadata->title[255] = '\0';
+                        }
+                    } else {
+                        strncpy(out_metadata->title, FileUtil::GetFilename(path).c_str(), 255);
+                        out_metadata->title[255] = '\0';
+                    }
+                } else {
+                    // No banner, use NDS header title
+                    std::string nds_title = FileSys::GetNDSGameTitle(nds_header);
+                    strncpy(out_metadata->title,
+                            nds_title.empty() ? FileUtil::GetFilename(path).c_str()
+                                              : nds_title.c_str(),
+                            255);
+                    out_metadata->title[255] = '\0';
+                }
+                out_metadata->publisher[0] = '\0';
+                return true;
+            }
+        }
     }
 
     auto loader = Loader::GetLoader(path);
@@ -2864,4 +3295,81 @@ void az_eject_cartridge(void) {
 
 bool az_is_cartridge_inserted(void) {
     return !Core::System::GetInstance().GetCartridge().empty();
+}
+
+// ---------------------------------------------------------------------------
+// TWL (DS/DSi) emulation via melonDS
+// ---------------------------------------------------------------------------
+
+static std::string s_melonds_bios_arm9;
+static std::string s_melonds_bios_arm7;
+static std::string s_melonds_bios_arm9i;
+static std::string s_melonds_bios_arm7i;
+
+void az_set_melonds_bios(int type, const char* path) {
+    if (!path) return;
+    switch (type) {
+    case 0: s_melonds_bios_arm9 = path; break;
+    case 1: s_melonds_bios_arm7 = path; break;
+    case 2: s_melonds_bios_arm9i = path; break;
+    case 3: s_melonds_bios_arm7i = path; break;
+    }
+}
+
+const char* az_get_melonds_bios(int type) {
+    static thread_local std::string result;
+    switch (type) {
+    case 0: result = s_melonds_bios_arm9; break;
+    case 1: result = s_melonds_bios_arm7; break;
+    case 2: result = s_melonds_bios_arm9i; break;
+    case 3: result = s_melonds_bios_arm7i; break;
+    default: result.clear(); break;
+    }
+    return result.c_str();
+}
+
+bool az_run_twl(const char* path) {
+    if (!path || !*path) {
+        LOG_ERROR(Frontend, "az_run_twl: null or empty path");
+        return false;
+    }
+    LOG_INFO(Frontend, "az_run_twl: launching DS ROM: {}", path);
+    Core::System::GetInstance().RequestTWLLaunch(std::string(path));
+    return true;
+}
+
+bool az_run_twl_ds_firmware(void) {
+    LOG_INFO(Frontend, "az_run_twl_ds_firmware: launching DS firmware boot");
+    Core::System::GetInstance().RequestTWLFirmwareBoot();
+    return true;
+}
+
+bool az_run_twl_dsi_nand(const char* nand_path) {
+    if (!nand_path || !*nand_path) {
+        LOG_ERROR(Frontend, "az_run_twl_dsi_nand: null or empty path");
+        return false;
+    }
+    LOG_INFO(Frontend, "az_run_twl_dsi_nand: launching DSi NAND: {}", nand_path);
+    Core::System::GetInstance().RequestDSiNANDBoot(std::string(nand_path));
+    return true;
+}
+
+bool az_check_twl_launch(void) {
+    return Core::System::GetInstance().GetStatus() == Core::System::ResultStatus::TWLLaunchRequested;
+}
+
+int az_get_dsi_nand_titles(const char* nand_path, const char** out_buf, int max_count) {
+    if (!nand_path) return 0;
+    auto titles = TWL::Core::GetDSiNANDTitles(std::string(nand_path));
+    
+    static std::vector<std::string> stored_titles;
+    stored_titles = std::move(titles);
+    
+    int count = std::min(static_cast<int>(stored_titles.size()), max_count);
+    if (out_buf) {
+        for (int i = 0; i < count; i++) {
+            out_buf[i] = stored_titles[i].c_str();
+        }
+    }
+    return static_cast<int>(stored_titles.size());
 }

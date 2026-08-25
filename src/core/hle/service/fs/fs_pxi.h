@@ -60,6 +60,8 @@ private:
     void IsSdmcDetected(Kernel::HLERequestContext& ctx);
     void IsSdmcWritable(Kernel::HLERequestContext& ctx);
     void CardSlotIsInserted(Kernel::HLERequestContext& ctx);
+    void GetLegacyRomHeader(Kernel::HLERequestContext& ctx);
+    void GetLegacyBannerData(Kernel::HLERequestContext& ctx);
 
     /// Returns the program ID of the client process that issued the request.
     u64 GetClientProgramId(Kernel::HLERequestContext& ctx) const;
