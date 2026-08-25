@@ -11,11 +11,11 @@ NS_S::NS_S(std::shared_ptr<Service::APT::Module> apt)
     : Service::APT::Module::NSInterface(std::move(apt), "ns:s", 3) {
     static const FunctionInfo functions[] = {
         // clang-format off
-        {0x0001, nullptr, "LaunchFIRM"},
-        {0x0002, nullptr, "LaunchTitle"},
+        {0x0001, &NS_S::LaunchFIRM, "LaunchFIRM"},
+        {0x0002, &NS_S::LaunchTitle, "LaunchTitle"},
         {0x0003, nullptr, "TerminateApplication"},
         {0x0004, nullptr, "TerminateProcess"},
-        {0x0005, nullptr, "LaunchApplicationFIRM"},
+        {0x0005, &NS_S::LaunchApplicationFIRM, "LaunchApplicationFIRM"},
         {0x0006, &NS_S::SetWirelessRebootInfo, "SetWirelessRebootInfo"},
         {0x0007, &NS_S::CardUpdateInitialize, "CardUpdateInitialize"},
         {0x0008, nullptr, "CardUpdateShutdown"},

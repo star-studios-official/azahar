@@ -543,6 +543,18 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                settingsSection("DS/DSi Emulation", icon: "gamecontroller") {
+                    NavigationLink {
+                        MelonDSSettingsView()
+                    } label: {
+                        Label("melonDS Settings", systemImage: "gamecontroller")
+                    }
+                    
+                    Text("Configure DS/DSi BIOS, rendering, and emulation options")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 settingsSection("System Files", icon: "internaldrive") {
                     NavigationLink {
                         SystemFilesView()

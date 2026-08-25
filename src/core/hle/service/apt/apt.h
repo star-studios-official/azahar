@@ -107,6 +107,46 @@ public:
          *     1 : Result of function, 0 on success, otherwise error code
          */
         void RebootSystemClean(Kernel::HLERequestContext& ctx);
+
+        /**
+         * NS::LaunchFIRM service function.
+         * Launches FIRM for the specified title (or gamecard if TID=0).
+         * For TWL titles, redirects to melonDS backend.
+         * Inputs:
+         *     1-2 : u64 Title ID
+         *     3 : Unused
+         * Outputs:
+         *     0 : Header
+         *     1 : Result of function
+         */
+        void LaunchFIRM(Kernel::HLERequestContext& ctx);
+
+        /**
+         * NS::LaunchTitle service function.
+         * Wrapper for PMApp:LaunchTitle. MediaType determined by title ID.
+         * Home Menu only uses this for launching system modules.
+         * Inputs:
+         *     1-2 : u64 Title ID
+         *     3 : Launch Flags
+         * Outputs:
+         *     0 : Header
+         *     1 : Result of function
+         *     2 : Process ID
+         */
+        void LaunchTitle(Kernel::HLERequestContext& ctx);
+
+        /**
+         * NS::LaunchApplicationFIRM service function.
+         * Triggers FIRM launch for the specified title.
+         * For TWL titles, redirects to melonDS backend.
+         * Inputs:
+         *     1-2 : u64 Title ID
+         *     3 : Flags
+         * Outputs:
+         *     0 : Header
+         *     1 : Result of function
+         */
+        void LaunchApplicationFIRM(Kernel::HLERequestContext& ctx);
     };
 
     class APTInterface : public ServiceFramework<APTInterface> {

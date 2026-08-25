@@ -1806,7 +1806,15 @@ bool FS_USER::ReadFromGameCardRom(u64 offset, void* out, u32 size) const {
         return false;
     }
     file.Seek(offset, SEEK_SET);
-    return file.ReadBytes(out, size) == size;
+    auto* bytes = static_cast<u8*>(out);
+    std::size_t total = 0;
+    while (total < size) {
+        std::size_t chunk = size - total;
+        std::size_t read = file.ReadBytes(bytes + total, chunk);
+        if (read == 0) break;
+        total += read;
+    }
+    return total == size;
 }
 
 void FS_USER::GetLegacyRomHeader(Kernel::HLERequestContext& ctx) {
@@ -1826,13 +1834,11 @@ void FS_USER::GetLegacyRomHeader(Kernel::HLERequestContext& ctx) {
     }
 
     if (success) {
-        output.WriteBytes(header.data(), header.size());
+        output.Write(header.data(), 0, header.size());
     }
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
-    rb.Push(success ? ResultSuccess
-                     : Result(FileSys::ErrCodes::NonExistingPath, ErrorModule::FS,
-                              ErrorSummary::NotFound, ErrorLevel::Status));
+    rb.Push(success ? ResultSuccess : FileSys::ResultNotFound);
 
     LOG_DEBUG(Service_FS, "GetLegacyRomHeader: media_type={}, title_id={:016X}, success={}",
               static_cast<u8>(media_type), title_id, success);
@@ -1858,8 +1864,8 @@ void FS_USER::GetLegacyBannerData(Kernel::HLERequestContext& ctx) {
             rom_file.Close();
 
             // Read the NDS ROM header to get the banner offset
-            NDSROMHeader nds_header{};
-            if (ReadFromGameCardRom(0, &nds_header, sizeof(NDSROMHeader))) {
+            FileSys::NDSROMHeader nds_header{};
+            if (ReadFromGameCardRom(0, &nds_header, sizeof(FileSys::NDSROMHeader))) {
                 u32 banner_offset = nds_header.banner_offset;
                 if (banner_offset > 0 &&
                     static_cast<u64>(banner_offset) + BANNER_SIZE <= file_size) {
@@ -1870,13 +1876,11 @@ void FS_USER::GetLegacyBannerData(Kernel::HLERequestContext& ctx) {
     }
 
     if (success) {
-        output.WriteBytes(banner.data(), banner.size());
+        output.Write(banner.data(), 0, banner.size());
     }
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
-    rb.Push(success ? ResultSuccess
-                     : Result(FileSys::ErrCodes::NonExistingPath, ErrorModule::FS,
-                              ErrorSummary::NotFound, ErrorLevel::Status));
+    rb.Push(success ? ResultSuccess : FileSys::ResultNotFound);
 
     LOG_DEBUG(Service_FS, "GetLegacyBannerData: media_type={}, title_id={:016X}, success={}",
               static_cast<u8>(media_type), title_id, success);
@@ -1900,13 +1904,11 @@ void FS_USER::GetLegacyRomHeader2(Kernel::HLERequestContext& ctx) {
     }
 
     if (success) {
-        output.WriteBytes(header.data(), header.size());
+        output.Write(header.data(), 0, header.size());
     }
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
-    rb.Push(success ? ResultSuccess
-                     : Result(FileSys::ErrCodes::NonExistingPath, ErrorModule::FS,
-                              ErrorSummary::NotFound, ErrorLevel::Status));
+    rb.Push(success ? ResultSuccess : FileSys::ResultNotFound);
 
     LOG_DEBUG(Service_FS,
               "GetLegacyRomHeader2: media_type={}, title_id={:016X}, size=0x{:X}, success={}",
@@ -1925,7 +1927,7 @@ void FS_USER::GetLegacySubBannerData(Kernel::HLERequestContext& ctx) {
     // For the Home Menu, returning all zeros is acceptable since it's
     // primarily used for extended game banner animations (DSi).
     std::vector<u8> data(output_size, 0);
-    output.WriteBytes(data.data(), data.size());
+    output.Write(data.data(), 0, data.size());
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);

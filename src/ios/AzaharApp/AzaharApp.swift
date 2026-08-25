@@ -185,6 +185,15 @@ final class AppState: ObservableObject {
             return
         }
         
+        // DS/DSi ROMs go directly to melonDS (TWL_FIRM)
+        let ext = (game.path as NSString).pathExtension.lowercased()
+        if ext == "nds" || ext == "srl" || ext == "dsi" {
+            AppLogger.info("DS ROM detected (\(ext)), launching via melonDS")
+            currentGame = game
+            isEmulating = true
+            return
+        }
+        
         // If we're already emulating, stop the previous session first so the
         // next launch starts from a clean state. We dispatch the new launch
         // to the next run-loop tick so SwiftUI has time to dismiss the old

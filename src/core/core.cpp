@@ -25,6 +25,7 @@
 #endif
 #include "core/cheats/cheats.h"
 #include "core/core.h"
+#include "core/twl/twl_core.h"
 #include "core/core_timing.h"
 #include "core/dumping/backend.h"
 #include "core/file_sys/ncch_container.h"
@@ -998,6 +999,37 @@ void System::serialize(Archive& ar, const unsigned int file_version) {
     }
 
     save_state_status = SaveStateStatus::NONE;
+}
+
+bool System::StartTWLCore(const std::string& nds_rom_path) {
+    LOG_INFO(Core, "Starting TWL (melonDS) core for: {}", nds_rom_path);
+
+    // Stop any existing TWL core
+    StopTWLCore();
+
+    m_twl_core = std::make_unique<TWL::Core>();
+    if (!m_twl_core->Initialize(nds_rom_path)) {
+        LOG_ERROR(Core, "Failed to initialize TWL core: {}", m_twl_core->GetError());
+        m_twl_core.reset();
+        return false;
+    }
+
+    m_twl_core->SetStopCallback([this]() {
+        LOG_INFO(Core, "TWL core signaled stop");
+        RequestShutdown();
+    });
+
+    m_twl_core->Start();
+    LOG_INFO(Core, "TWL core started successfully");
+    return true;
+}
+
+void System::StopTWLCore() {
+    if (m_twl_core) {
+        LOG_INFO(Core, "Stopping TWL core");
+        m_twl_core->Stop();
+        m_twl_core.reset();
+    }
 }
 
 SERIALIZE_IMPL(System)

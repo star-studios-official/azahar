@@ -39,6 +39,46 @@ final class EmulationViewModel: ObservableObject {
         AppLogger.info("=== EMULATION VIEW MODEL START ===")
         AppLogger.gameOperation("Starting emulation", path: game.path, titleId: game.titleId)
         
+        // DS/DSi ROMs go directly to melonDS
+        let ext = (game.path as NSString).pathExtension.lowercased()
+        if ext == "nds" || ext == "srl" || ext == "dsi" {
+            AppLogger.info("DS ROM detected (\(ext)), launching melonDS")
+            gameTitle = game.title.isEmpty ? (game.path as NSString).lastPathComponent : game.title
+            isLoading = true
+            isRunning = true
+            isPaused = false
+            // Start melonDS directly via the C bridge
+            emulationThread = Task.detached(priority: .userInitiated) {
+                // Wait until surface is set
+                var waitCount = 0
+                while !az_is_surface_set() {
+                    if Task.isCancelled { return }
+                    waitCount += 1
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                    if waitCount > 100 {
+                        await MainActor.run {
+                            self.isRunning = false
+                            self.isLoading = false
+                        }
+                        return
+                    }
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                await MainActor.run {
+                    self.isLoading = false
+                }
+                if Task.isCancelled { return }
+
+                // Run DS ROM directly through melonDS
+                az_run_twl(self.game.path)
+
+                await MainActor.run {
+                    self.isRunning = false
+                }
+            }
+            return
+        }
+        
         isLoading = true
         isRunning = true
         isPaused = false
@@ -120,6 +160,23 @@ final class EmulationViewModel: ObservableObject {
             AppLogger.info(">>> ENTERING C++ CORE <<<")
             az_run(path)
             AppLogger.info(">>> RETURNED FROM C++ CORE <<<")
+
+            // Check if this was a TWL FIRM launch (DS/DSi game selected from Home Menu)
+            let resultCode = az_get_last_result()
+            if resultCode == 0x7FFF0001 {
+                var twlPath = [CChar](repeating: 0, count: 1024)
+                if az_check_twl_launch(&twlPath, Int32(twlPath.count)) {
+                    let romPath = String(cString: twlPath)
+                    AppLogger.info("TWL FIRM launch detected, ROM: \(romPath)")
+                    await MainActor.run {
+                        self.isRunning = false
+                        self.gameTitle = "DS Game: \(URL(fileURLWithPath: romPath).lastPathComponent)"
+                        // TODO: Launch melonDS backend with this ROM
+                        AppLogger.info("TWL FIRM: melonDS backend not yet integrated. ROM path stored: \(romPath)")
+                    }
+                    return
+                }
+            }
 
             await MainActor.run {
                 self.isRunning = false

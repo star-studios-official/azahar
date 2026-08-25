@@ -224,6 +224,19 @@ void az_run(const char* path);
 /// Returns the result code that ended the last az_run() session.
 int az_get_last_result(void);
 
+/// Check if a TWL (DS/DSi) ROM launch was requested by the Home Menu.
+/// Returns true and fills out_path if a TWL launch is pending.
+/// out_path must be a buffer of at least 1024 bytes.
+bool az_check_twl_launch(char* out_path, int out_path_size);
+
+// melonDS BIOS file paths
+void az_set_melonds_bios(int bios_type, const char* path);
+// bios_type: 0=ARM9, 1=ARM7, 2=DSiARM9, 3=DSiARM7, 4=Firmware
+const char* az_get_melonds_bios(int bios_type);
+
+/// Run a DS/DSi ROM directly via melonDS (no 3DS Home Menu).
+void az_run_twl(const char* nds_rom_path);
+
 void az_pause_emulation(void);
 void az_unpause_emulation(void);
 void az_stop_emulation(void);
@@ -248,6 +261,9 @@ void az_emu_secondary_surface_destroy(void);
 /// Presents the latest rendered frame. Call once per vsync from a CADisplayLink
 /// (equivalent to the Android Choreographer doFrame()).
 void az_present_frame(void);
+
+/// Blit melonDS framebuffers to the Metal surface when a DS game is running.
+bool az_twl_present_frame(void);
 
 /// Informs the renderer that the framebuffer layout should be recomputed.
 void az_update_framebuffer(bool is_portrait);

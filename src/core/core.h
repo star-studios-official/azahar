@@ -21,6 +21,10 @@
 #include "core/perf_stats.h"
 #ifdef ENABLE_RETRO_ACHIEVEMENTS
 #include "retro_achievements/client.h"
+
+namespace TWL {
+class Core;
+}
 #endif
 
 namespace Frontend {
@@ -117,6 +121,7 @@ public:
         ErrorCoreExceptionRaised,   ///< The CPU emulation raised an exception
         ErrorMemoryExceptionRaised, ///< Unmmaped memory was accessed
         ShutdownRequested,          ///< Emulated program requested a system shutdown
+        TWLLaunchRequested,         ///< TWL FIRM launch requested (DS/DSi game via Home Menu)
         ErrorUnknown                ///< Any other error
     };
 
@@ -162,6 +167,26 @@ public:
     void RequestShutdown() {
         SendSignal(Signal::Shutdown);
     }
+
+    /// Request a TWL (DS/DSi) game launch via melonDS
+    void RequestTWLLaunch(const std::string& nds_rom_path) {
+        m_pending_twl_rom = nds_rom_path;
+        SendSignal(Signal::Shutdown);
+    }
+
+    /// Get the pending TWL ROM path (cleared after read)
+    std::string TakePendingTWLPath() {
+        return std::move(m_pending_twl_rom);
+    }
+
+    /// Start the TWL (melonDS) emulation core for a given ROM
+    bool StartTWLCore(const std::string& nds_rom_path);
+
+    /// Stop the TWL emulation core
+    void StopTWLCore();
+
+    /// Get the TWL core (may be nullptr if not running)
+    TWL::Core* GetTWLCore() const { return m_twl_core.get(); }
 
     /**
      * Load an executable application.
@@ -536,6 +561,8 @@ private:
     std::string m_filepath;
     std::string m_chainloadpath;
     std::optional<u8> m_mem_mode;
+    std::string m_pending_twl_rom; ///< Pending TWL ROM path for DS/DSi game launch via melonDS
+    std::unique_ptr<class TWL::Core> m_twl_core; ///< melonDS-based TWL emulation core
     u64 title_id;
 
     std::mutex signal_mutex;

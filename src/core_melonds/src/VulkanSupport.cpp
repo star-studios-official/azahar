@@ -1,0 +1,995 @@
+/*
+    Copyright 2016-2026 melonDS team
+
+    This file is part of melonDS.
+
+    melonDS is free software: you can redistribute it and/or modify it under
+    the terms of the GNU General Public License as published by the Free
+    Software Foundation, either version 3 of the License, or (at your option)
+    any later version.
+
+    melonDS is distributed in the hope that it will be useful, but WITHOUT ANY
+    WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+    FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License along
+    with melonDS. If not, see http://www.gnu.org/licenses/.
+*/
+
+#include "VulkanSupport.h"
+
+#include <algorithm>
+#include <string.h>
+#include <mutex>
+
+#include "Platform.h"
+
+#include <glslang/Public/ShaderLang.h>
+#include <glslang/Public/ResourceLimits.h>
+#include <glslang/SPIRV/GlslangToSpv.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
+namespace melonDS
+{
+
+namespace VK
+{
+
+using Platform::Log;
+using Platform::LogLevel;
+
+static PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = nullptr;
+static std::once_flag RuntimeLoadOnce;
+static bool RuntimeLoaded = false;
+static void* RuntimeLibrary = nullptr;
+static std::mutex GlslangMutex;
+static u32 GlslangUsers = 0;
+
+#define VK_DEFINE_FUNC(name) PFN_##name name = nullptr;
+VK_FOREACH_GLOBAL_FUNC(VK_DEFINE_FUNC)
+VK_FOREACH_INSTANCE_FUNC(VK_DEFINE_FUNC)
+VK_FOREACH_DEVICE_FUNC(VK_DEFINE_FUNC)
+#undef VK_DEFINE_FUNC
+
+static void* OpenLibrary()
+{
+#ifdef _WIN32
+    return (void*)LoadLibraryA("vulkan-1.dll");
+#elif defined(__APPLE__)
+    const char* candidates[] =
+    {
+        // the copy shipped inside the app bundle wins, so releases behave
+        // the same regardless of what is installed on the system
+        "@executable_path/../Frameworks/libvulkan.1.dylib",
+        "@executable_path/../Frameworks/libMoltenVK.dylib",
+        "libvulkan.dylib",
+        "libvulkan.1.dylib",
+        "libMoltenVK.dylib",
+        "/opt/homebrew/lib/libvulkan.1.dylib",
+        "/usr/local/lib/libvulkan.1.dylib",
+        "/opt/homebrew/lib/libMoltenVK.dylib",
+        "/usr/local/lib/libMoltenVK.dylib",
+    };
+    for (const char* name : candidates)
+    {
+        if (void* lib = dlopen(name, RTLD_NOW | RTLD_LOCAL))
+            return lib;
+    }
+    return nullptr;
+#else
+    if (void* lib = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL))
+        return lib;
+    return dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
+#endif
+}
+
+static void* GetLibSymbol(void* lib, const char* name)
+{
+#ifdef _WIN32
+    return (void*)GetProcAddress((HMODULE)lib, name);
+#else
+    return dlsym(lib, name);
+#endif
+}
+
+bool IsRuntimeAvailable()
+{
+    static int available = -1;
+    if (available == -1)
+    {
+        void* lib = OpenLibrary();
+        available = (lib && GetLibSymbol(lib, "vkGetInstanceProcAddr")) ? 1 : 0;
+        if (lib)
+        {
+#ifdef _WIN32
+            FreeLibrary((HMODULE)lib);
+#else
+            dlclose(lib);
+#endif
+        }
+    }
+    return available == 1;
+}
+
+bool Context::LoadLibrary()
+{
+    std::call_once(RuntimeLoadOnce, []
+    {
+        RuntimeLibrary = OpenLibrary();
+        if (!RuntimeLibrary)
+        {
+            Log(LogLevel::Info, "Vulkan: no Vulkan library found\n");
+            return;
+        }
+
+        vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)GetLibSymbol(
+            RuntimeLibrary, "vkGetInstanceProcAddr");
+
+        // Exported loader/ICD trampolines dispatch from their handle argument
+        // and are valid across every Context. Device-specific pointers from
+        // vkGetDeviceProcAddr cannot safely be stored process-globally.
+#define VK_LOAD_EXPORTED(name) name = (PFN_##name)GetLibSymbol(RuntimeLibrary, #name);
+        VK_FOREACH_GLOBAL_FUNC(VK_LOAD_EXPORTED)
+        VK_FOREACH_INSTANCE_FUNC(VK_LOAD_EXPORTED)
+        VK_FOREACH_DEVICE_FUNC(VK_LOAD_EXPORTED)
+#undef VK_LOAD_EXPORTED
+
+        bool complete = vkGetInstanceProcAddr != nullptr;
+#define VK_CHECK_EXPORTED(name) complete = complete && name != nullptr;
+        VK_FOREACH_GLOBAL_FUNC(VK_CHECK_EXPORTED)
+        VK_FOREACH_INSTANCE_FUNC(VK_CHECK_EXPORTED)
+        VK_FOREACH_DEVICE_FUNC(VK_CHECK_EXPORTED)
+#undef VK_CHECK_EXPORTED
+
+        if (!complete)
+        {
+            Log(LogLevel::Error, "Vulkan: library is missing required core entry points\n");
+            return;
+        }
+        RuntimeLoaded = true;
+    });
+
+    return RuntimeLoaded;
+}
+
+Context::~Context()
+{
+    Deinit();
+}
+
+bool Context::Init()
+{
+    if (Valid)
+        return true;
+
+    if (!LoadLibrary())
+        return false;
+
+    // instance
+
+    u32 numInstExts = 0;
+    std::vector<VkExtensionProperties> instExts;
+    if (vkEnumerateInstanceExtensionProperties(nullptr, &numInstExts, nullptr) == VK_SUCCESS && numInstExts)
+    {
+        instExts.resize(numInstExts);
+        vkEnumerateInstanceExtensionProperties(nullptr, &numInstExts, instExts.data());
+    }
+
+    auto hasInstExt = [&](const char* name)
+    {
+        for (auto& ext : instExts)
+            if (!strcmp(ext.extensionName, name)) return true;
+        return false;
+    };
+
+    std::vector<const char*> instExtNames;
+    VkInstanceCreateFlags instFlags = 0;
+    if (hasInstExt("VK_KHR_portability_enumeration"))
+    {
+        // required to enumerate MoltenVK through the Khronos loader
+        instExtNames.push_back("VK_KHR_portability_enumeration");
+        instFlags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+    }
+    if (hasInstExt("VK_KHR_get_physical_device_properties2"))
+        instExtNames.push_back("VK_KHR_get_physical_device_properties2");
+
+    VkApplicationInfo appInfo = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
+    appInfo.pApplicationName = "melonDS";
+    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.pEngineName = "melonDS";
+    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.apiVersion = VK_API_VERSION_1_1;
+
+    VkInstanceCreateInfo instInfo = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
+    instInfo.flags = instFlags;
+    instInfo.pApplicationInfo = &appInfo;
+    instInfo.enabledExtensionCount = (u32)instExtNames.size();
+    instInfo.ppEnabledExtensionNames = instExtNames.data();
+
+    VkResult res = vkCreateInstance(&instInfo, nullptr, &Instance);
+    if (res != VK_SUCCESS)
+    {
+        Log(LogLevel::Error, "Vulkan: vkCreateInstance failed (%d)\n", res);
+        return false;
+    }
+
+    // physical device
+
+    u32 numPhysDevs = 0;
+    vkEnumeratePhysicalDevices(Instance, &numPhysDevs, nullptr);
+    if (numPhysDevs == 0)
+    {
+        Log(LogLevel::Error, "Vulkan: no physical devices\n");
+        Deinit();
+        return false;
+    }
+    std::vector<VkPhysicalDevice> physDevs(numPhysDevs);
+    vkEnumeratePhysicalDevices(Instance, &numPhysDevs, physDevs.data());
+
+    // The full renderer records both compute and graphics commands on this
+    // queue. Pick the best device that actually exposes such a queue rather
+    // than selecting a device first and accepting a compute-only family.
+    PhysDev = VK_NULL_HANDLE;
+    int bestScore = -1;
+    for (VkPhysicalDevice dev : physDevs)
+    {
+        VkPhysicalDeviceProperties props;
+        vkGetPhysicalDeviceProperties(dev, &props);
+
+        u32 numQueueFamilies = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(dev, &numQueueFamilies, nullptr);
+        std::vector<VkQueueFamilyProperties> queueFamilies(numQueueFamilies);
+        vkGetPhysicalDeviceQueueFamilyProperties(dev, &numQueueFamilies, queueFamilies.data());
+
+        u32 compatibleQueue = UINT32_MAX;
+        for (u32 i = 0; i < numQueueFamilies; i++)
+        {
+            constexpr VkQueueFlags required = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+            if ((queueFamilies[i].queueFlags & required) == required)
+            {
+                compatibleQueue = i;
+                break;
+            }
+        }
+        if (compatibleQueue == UINT32_MAX)
+            continue;
+
+        int score = 0;
+        if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) score = 2;
+        else if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) score = 1;
+        if (score > bestScore)
+        {
+            bestScore = score;
+            PhysDev = dev;
+            QueueFamily = compatibleQueue;
+        }
+    }
+
+    if (PhysDev == VK_NULL_HANDLE)
+    {
+        Log(LogLevel::Error, "Vulkan: no graphics+compute queue\n");
+        Deinit();
+        return false;
+    }
+
+    vkGetPhysicalDeviceProperties(PhysDev, &Props);
+    vkGetPhysicalDeviceMemoryProperties(PhysDev, &MemProps);
+
+    Log(LogLevel::Info, "Vulkan: using device %s (Vulkan %d.%d)\n",
+        Props.deviceName,
+        VK_VERSION_MAJOR(Props.apiVersion), VK_VERSION_MINOR(Props.apiVersion));
+
+    // device
+
+    u32 numDevExts = 0;
+    std::vector<VkExtensionProperties> devExts;
+    vkEnumerateDeviceExtensionProperties(PhysDev, nullptr, &numDevExts, nullptr);
+    if (numDevExts)
+    {
+        devExts.resize(numDevExts);
+        vkEnumerateDeviceExtensionProperties(PhysDev, nullptr, &numDevExts, devExts.data());
+    }
+    auto hasDevExt = [&](const char* name)
+    {
+        for (auto& ext : devExts)
+            if (!strcmp(ext.extensionName, name)) return true;
+        return false;
+    };
+
+    std::vector<const char*> devExtNames;
+    if (hasDevExt("VK_KHR_portability_subset"))
+        devExtNames.push_back("VK_KHR_portability_subset");
+
+    VkPhysicalDeviceFeatures supported = {};
+    vkGetPhysicalDeviceFeatures(PhysDev, &supported);
+    VkPhysicalDeviceFeatures enabled = {};
+    // matches the robustness the GL renderer gets from the GL spec:
+    // out-of-bounds SSBO accesses in pathological scenes must not crash
+    enabled.robustBufferAccess = supported.robustBufferAccess;
+
+    float queuePriority = 1.0f;
+    VkDeviceQueueCreateInfo queueInfo = {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
+    queueInfo.queueFamilyIndex = QueueFamily;
+    queueInfo.queueCount = 1;
+    queueInfo.pQueuePriorities = &queuePriority;
+
+    VkDeviceCreateInfo devInfo = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
+    devInfo.queueCreateInfoCount = 1;
+    devInfo.pQueueCreateInfos = &queueInfo;
+    devInfo.enabledExtensionCount = (u32)devExtNames.size();
+    devInfo.ppEnabledExtensionNames = devExtNames.data();
+    devInfo.pEnabledFeatures = &enabled;
+
+    res = vkCreateDevice(PhysDev, &devInfo, nullptr, &Device);
+    if (res != VK_SUCCESS)
+    {
+        Log(LogLevel::Error, "Vulkan: vkCreateDevice failed (%d)\n", res);
+        Deinit();
+        return false;
+    }
+
+    vkGetDeviceQueue(Device, QueueFamily, 0, &Queue);
+
+    VkCommandPoolCreateInfo poolInfo = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    poolInfo.queueFamilyIndex = QueueFamily;
+    if (vkCreateCommandPool(Device, &poolInfo, nullptr, &CmdPool) != VK_SUCCESS)
+    {
+        Log(LogLevel::Error, "Vulkan: failed to create command pool\n");
+        Deinit();
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(GlslangMutex);
+        if (GlslangUsers == 0 && !glslang::InitializeProcess())
+        {
+            Log(LogLevel::Error, "Vulkan: failed to initialise glslang\n");
+            Deinit();
+            return false;
+        }
+        GlslangUsers++;
+        OwnsGlslang = true;
+    }
+
+    Valid = true;
+    return true;
+}
+
+void Context::Deinit()
+{
+    if (Device)
+    {
+        vkDeviceWaitIdle(Device);
+        if (CmdPool) vkDestroyCommandPool(Device, CmdPool, nullptr);
+        vkDestroyDevice(Device, nullptr);
+    }
+    if (Instance)
+        vkDestroyInstance(Instance, nullptr);
+
+    if (OwnsGlslang)
+    {
+        std::lock_guard<std::mutex> lock(GlslangMutex);
+        if (--GlslangUsers == 0)
+            glslang::FinalizeProcess();
+        OwnsGlslang = false;
+    }
+
+    CmdPool = VK_NULL_HANDLE;
+    Device = VK_NULL_HANDLE;
+    Instance = VK_NULL_HANDLE;
+    PhysDev = VK_NULL_HANDLE;
+    Queue = VK_NULL_HANDLE;
+    Valid = false;
+}
+
+u32 Context::FindMemoryType(u32 typeBits, VkMemoryPropertyFlags wanted)
+{
+    for (u32 i = 0; i < MemProps.memoryTypeCount; i++)
+    {
+        if ((typeBits & (1u << i)) &&
+            (MemProps.memoryTypes[i].propertyFlags & wanted) == wanted)
+            return i;
+    }
+    return UINT32_MAX;
+}
+
+bool Context::CreateBuffer(Buffer& buf, VkDeviceSize size, VkBufferUsageFlags usage, bool hostVisible)
+{
+    if (size == 0 ||
+        ((usage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) &&
+         size > Props.limits.maxStorageBufferRange))
+        return false;
+
+    VkBufferCreateInfo bufInfo = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+    bufInfo.size = size;
+    bufInfo.usage = usage;
+    bufInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    if (vkCreateBuffer(Device, &bufInfo, nullptr, &buf.Buf) != VK_SUCCESS)
+        return false;
+
+    VkMemoryRequirements memReq;
+    vkGetBufferMemoryRequirements(Device, buf.Buf, &memReq);
+
+    u32 memType;
+    if (hostVisible)
+    {
+        memType = FindMemoryType(memReq.memoryTypeBits,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        if (memType == UINT32_MAX)
+            memType = FindMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    }
+    else
+    {
+        memType = FindMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+        if (memType == UINT32_MAX)
+            memType = FindMemoryType(memReq.memoryTypeBits, 0);
+    }
+    if (memType == UINT32_MAX)
+    {
+        vkDestroyBuffer(Device, buf.Buf, nullptr);
+        buf.Buf = VK_NULL_HANDLE;
+        return false;
+    }
+
+    VkMemoryAllocateInfo allocInfo = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocInfo.allocationSize = memReq.size;
+    allocInfo.memoryTypeIndex = memType;
+    if (vkAllocateMemory(Device, &allocInfo, nullptr, &buf.Mem) != VK_SUCCESS)
+    {
+        vkDestroyBuffer(Device, buf.Buf, nullptr);
+        buf.Buf = VK_NULL_HANDLE;
+        return false;
+    }
+    if (vkBindBufferMemory(Device, buf.Buf, buf.Mem, 0) != VK_SUCCESS)
+    {
+        vkFreeMemory(Device, buf.Mem, nullptr);
+        vkDestroyBuffer(Device, buf.Buf, nullptr);
+        buf = {};
+        return false;
+    }
+
+    buf.Size = size;
+    buf.AllocationSize = memReq.size;
+    buf.MemoryFlags = MemProps.memoryTypes[memType].propertyFlags;
+    buf.Map = nullptr;
+    if (hostVisible)
+    {
+        if (vkMapMemory(Device, buf.Mem, 0, VK_WHOLE_SIZE, 0, &buf.Map) != VK_SUCCESS)
+        {
+            DestroyBuffer(buf);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void Context::DestroyBuffer(Buffer& buf)
+{
+    if (buf.Map)
+        vkUnmapMemory(Device, buf.Mem);
+    if (buf.Buf)
+        vkDestroyBuffer(Device, buf.Buf, nullptr);
+    if (buf.Mem)
+        vkFreeMemory(Device, buf.Mem, nullptr);
+    buf = {};
+}
+
+static VkMappedMemoryRange MappedRange(const Context::Buffer& buf,
+                                       VkDeviceSize offset, VkDeviceSize size,
+                                       VkDeviceSize atomSize)
+{
+    const VkDeviceSize end = size == VK_WHOLE_SIZE
+        ? buf.AllocationSize
+        : std::min(offset + size, buf.AllocationSize);
+    const VkDeviceSize alignedOffset = offset - (offset % atomSize);
+    VkDeviceSize alignedEnd = ((end + atomSize - 1) / atomSize) * atomSize;
+    alignedEnd = std::min(alignedEnd, buf.AllocationSize);
+
+    VkMappedMemoryRange range = {VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE};
+    range.memory = buf.Mem;
+    range.offset = alignedOffset;
+    range.size = alignedEnd - alignedOffset;
+    return range;
+}
+
+bool Context::FlushBuffer(const Buffer& buf, VkDeviceSize offset, VkDeviceSize size)
+{
+    if (!buf.Map || !buf.Mem)
+        return false;
+    if (buf.MemoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+        return true;
+
+    VkMappedMemoryRange range = MappedRange(buf, offset, size, Props.limits.nonCoherentAtomSize);
+    return vkFlushMappedMemoryRanges(Device, 1, &range) == VK_SUCCESS;
+}
+
+bool Context::InvalidateBuffer(const Buffer& buf, VkDeviceSize offset, VkDeviceSize size)
+{
+    if (!buf.Map || !buf.Mem)
+        return false;
+    if (buf.MemoryFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+        return true;
+
+    VkMappedMemoryRange range = MappedRange(buf, offset, size, Props.limits.nonCoherentAtomSize);
+    return vkInvalidateMappedMemoryRanges(Device, 1, &range) == VK_SUCCESS;
+}
+
+bool Context::CreateImage(Image& img, VkFormat format, u32 width, u32 height, u32 layers,
+                          VkImageUsageFlags usage, bool array2D)
+{
+    if (width == 0 || height == 0 || layers == 0 ||
+        width > Props.limits.maxImageDimension2D ||
+        height > Props.limits.maxImageDimension2D ||
+        layers > Props.limits.maxImageArrayLayers)
+        return false;
+
+    VkFormatProperties formatProps;
+    vkGetPhysicalDeviceFormatProperties(PhysDev, format, &formatProps);
+    VkFormatFeatureFlags requiredFeatures = 0;
+    if (usage & VK_IMAGE_USAGE_SAMPLED_BIT)
+        requiredFeatures |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+    if (usage & VK_IMAGE_USAGE_STORAGE_BIT)
+        requiredFeatures |= VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
+    if (usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+        requiredFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
+    if (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+        requiredFeatures |= VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    if ((formatProps.optimalTilingFeatures & requiredFeatures) != requiredFeatures)
+        return false;
+
+    VkImageCreateInfo imgInfo = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+    imgInfo.imageType = VK_IMAGE_TYPE_2D;
+    imgInfo.format = format;
+    imgInfo.extent = {width, height, 1};
+    imgInfo.mipLevels = 1;
+    imgInfo.arrayLayers = layers;
+    imgInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imgInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imgInfo.usage = usage;
+    imgInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    if (vkCreateImage(Device, &imgInfo, nullptr, &img.Img) != VK_SUCCESS)
+        return false;
+
+    VkMemoryRequirements memReq;
+    vkGetImageMemoryRequirements(Device, img.Img, &memReq);
+
+    u32 memType = FindMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (memType == UINT32_MAX)
+        memType = FindMemoryType(memReq.memoryTypeBits, 0);
+    if (memType == UINT32_MAX)
+    {
+        vkDestroyImage(Device, img.Img, nullptr);
+        img.Img = VK_NULL_HANDLE;
+        return false;
+    }
+
+    VkMemoryAllocateInfo allocInfo = {VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
+    allocInfo.allocationSize = memReq.size;
+    allocInfo.memoryTypeIndex = memType;
+    if (vkAllocateMemory(Device, &allocInfo, nullptr, &img.Mem) != VK_SUCCESS)
+    {
+        vkDestroyImage(Device, img.Img, nullptr);
+        img.Img = VK_NULL_HANDLE;
+        return false;
+    }
+    if (vkBindImageMemory(Device, img.Img, img.Mem, 0) != VK_SUCCESS)
+    {
+        vkFreeMemory(Device, img.Mem, nullptr);
+        vkDestroyImage(Device, img.Img, nullptr);
+        img = {};
+        return false;
+    }
+
+    VkImageViewCreateInfo viewInfo = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    viewInfo.image = img.Img;
+    viewInfo.viewType = array2D ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = format;
+    viewInfo.subresourceRange = {(VkImageAspectFlags)(format == VK_FORMAT_D16_UNORM
+        ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT), 0, 1, 0, layers};
+    if (vkCreateImageView(Device, &viewInfo, nullptr, &img.View) != VK_SUCCESS)
+    {
+        DestroyImage(img);
+        return false;
+    }
+
+    img.Format = format;
+    img.Width = width;
+    img.Height = height;
+    img.Layers = layers;
+    img.Layout = VK_IMAGE_LAYOUT_UNDEFINED;
+    return true;
+}
+
+void Context::DestroyImage(Image& img)
+{
+    if (img.View)
+        vkDestroyImageView(Device, img.View, nullptr);
+    if (img.Img)
+        vkDestroyImage(Device, img.Img, nullptr);
+    if (img.Mem)
+        vkFreeMemory(Device, img.Mem, nullptr);
+    img = {};
+}
+
+void Context::TransitionImage(VkCommandBuffer cmd, Image& img, VkImageLayout newLayout,
+                              VkPipelineStageFlags srcStage, VkAccessFlags srcAccess,
+                              VkPipelineStageFlags dstStage, VkAccessFlags dstAccess)
+{
+    VkImageMemoryBarrier barrier = {VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+    barrier.srcAccessMask = srcAccess;
+    barrier.dstAccessMask = dstAccess;
+    barrier.oldLayout = img.Layout;
+    barrier.newLayout = newLayout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = img.Img;
+    barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, img.Layers};
+
+    vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+    img.Layout = newLayout;
+}
+
+VkCommandBuffer Context::BeginOneShot()
+{
+    VkCommandBufferAllocateInfo allocInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+    allocInfo.commandPool = CmdPool;
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer cmd;
+    if (vkAllocateCommandBuffers(Device, &allocInfo, &cmd) != VK_SUCCESS)
+        return VK_NULL_HANDLE;
+
+    VkCommandBufferBeginInfo beginInfo = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    if (vkBeginCommandBuffer(cmd, &beginInfo) != VK_SUCCESS)
+    {
+        vkFreeCommandBuffers(Device, CmdPool, 1, &cmd);
+        return VK_NULL_HANDLE;
+    }
+    return cmd;
+}
+
+bool Context::EndOneShot(VkCommandBuffer cmd)
+{
+    if (cmd == VK_NULL_HANDLE || vkEndCommandBuffer(cmd) != VK_SUCCESS)
+    {
+        if (cmd != VK_NULL_HANDLE)
+            vkFreeCommandBuffers(Device, CmdPool, 1, &cmd);
+        return false;
+    }
+
+    // wait only for this submission via a fence, not the whole queue:
+    // vkQueueWaitIdle drains every in-flight (pipelined) frame too
+    VkFence fence = VK_NULL_HANDLE;
+    VkFenceCreateInfo fenceInfo = {VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+    if (vkCreateFence(Device, &fenceInfo, nullptr, &fence) != VK_SUCCESS)
+    {
+        vkFreeCommandBuffers(Device, CmdPool, 1, &cmd);
+        return false;
+    }
+
+    VkSubmitInfo submitInfo = {VK_STRUCTURE_TYPE_SUBMIT_INFO};
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &cmd;
+    VkResult result = vkQueueSubmit(Queue, 1, &submitInfo, fence);
+    if (result != VK_SUCCESS)
+    {
+        vkDestroyFence(Device, fence, nullptr);
+        vkFreeCommandBuffers(Device, CmdPool, 1, &cmd);
+        return false;
+    }
+
+    result = vkWaitForFences(Device, 1, &fence, VK_TRUE, UINT64_MAX);
+    if (result != VK_SUCCESS)
+    {
+        // The submission may still own cmd and anything it references. Do
+        // not destroy those objects after a failed wait; device teardown will
+        // reclaim them after vkDeviceWaitIdle/vkDestroyDevice.
+        Log(LogLevel::Error, "Vulkan: one-shot fence wait failed (%d)\n", result);
+        Valid = false;
+        return false;
+    }
+
+    vkDestroyFence(Device, fence, nullptr);
+    vkFreeCommandBuffers(Device, CmdPool, 1, &cmd);
+    return true;
+}
+
+bool Context::UploadImageLayer(Image& img, const void* data, u32 width, u32 height,
+                               u32 layer, u32 bytesPerPixel,
+                               VkPipelineStageFlags consumerStages)
+{
+    VkDeviceSize size = (VkDeviceSize)width * height * bytesPerPixel;
+
+    Buffer staging;
+    if (!CreateBuffer(staging, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, true))
+        return false;
+    memcpy(staging.Map, data, size);
+    if (!FlushBuffer(staging, 0, size))
+    {
+        DestroyBuffer(staging);
+        return false;
+    }
+
+    VkCommandBuffer cmd = BeginOneShot();
+    if (cmd == VK_NULL_HANDLE)
+    {
+        DestroyBuffer(staging);
+        return false;
+    }
+
+    // the whole image (all layers) moves through TRANSFER_DST; individual layer
+    // uploads keep the image in SHADER_READ_ONLY between them
+    const bool undefined = img.Layout == VK_IMAGE_LAYOUT_UNDEFINED;
+    TransitionImage(cmd, img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        undefined ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : consumerStages,
+        undefined ? 0 : VK_ACCESS_SHADER_READ_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+
+    VkBufferImageCopy region = {};
+    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, layer, 1};
+    region.imageExtent = {width, height, 1};
+    vkCmdCopyBufferToImage(cmd, staging.Buf, img.Img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    TransitionImage(cmd, img, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+        consumerStages, VK_ACCESS_SHADER_READ_BIT);
+
+    const bool submitted = EndOneShot(cmd);
+    if (submitted || Valid)
+        DestroyBuffer(staging);
+    return submitted;
+}
+
+bool Context::CompileShader(VkShaderModule& out, ShaderStage stage, const std::string& source, const char* name)
+{
+    EShLanguage lang;
+    switch (stage)
+    {
+    case ShaderStage::Vertex:   lang = EShLangVertex; break;
+    case ShaderStage::Fragment: lang = EShLangFragment; break;
+    default:                    lang = EShLangCompute; break;
+    }
+
+    glslang::TShader shader(lang);
+
+    const char* sources[] = {source.c_str()};
+    shader.setStrings(sources, 1);
+    shader.setEnvInput(glslang::EShSourceGlsl, lang, glslang::EShClientVulkan, 100);
+    shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_1);
+    shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_3);
+
+    if (!shader.parse(GetDefaultResources(), 110, false, EShMsgDefault))
+    {
+        Log(LogLevel::Error, "Vulkan: shader %s failed to compile:\n%s\n", name, shader.getInfoLog());
+        return false;
+    }
+
+    glslang::TProgram program;
+    program.addShader(&shader);
+    if (!program.link(EShMsgDefault))
+    {
+        Log(LogLevel::Error, "Vulkan: shader %s failed to link:\n%s\n", name, program.getInfoLog());
+        return false;
+    }
+
+    std::vector<u32> spirv;
+    glslang::SpvOptions options;
+    options.disableOptimizer = false;
+    glslang::GlslangToSpv(*program.getIntermediate(lang), spirv, &options);
+
+    if (spirv.empty())
+    {
+        Log(LogLevel::Error, "Vulkan: shader %s produced no SPIR-V\n", name);
+        return false;
+    }
+
+    VkShaderModuleCreateInfo moduleInfo = {VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
+    moduleInfo.codeSize = spirv.size() * sizeof(u32);
+    moduleInfo.pCode = spirv.data();
+    if (vkCreateShaderModule(Device, &moduleInfo, nullptr, &out) != VK_SUCCESS)
+    {
+        Log(LogLevel::Error, "Vulkan: failed to create shader module %s\n", name);
+        return false;
+    }
+
+    return true;
+}
+
+bool Context::CreateRenderPass(VkRenderPass& out, VkFormat format, bool clear,
+                               u32 colorAttachmentCount, bool depth)
+{
+    std::vector<VkAttachmentDescription> attachments;
+    std::vector<VkAttachmentReference> colorRefs;
+    for (u32 i = 0; i < colorAttachmentCount; i++)
+    {
+        VkAttachmentDescription a = {};
+        a.format = format;
+        a.samples = VK_SAMPLE_COUNT_1_BIT;
+        a.loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+        a.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        a.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        a.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        a.initialLayout = clear ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        a.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        attachments.push_back(a);
+        colorRefs.push_back({i, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL});
+    }
+    VkAttachmentReference depthRef = {colorAttachmentCount, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+    if (depth)
+    {
+        VkAttachmentDescription a = {};
+        a.format = VK_FORMAT_D16_UNORM;
+        a.samples = VK_SAMPLE_COUNT_1_BIT;
+        a.loadOp = clear ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+        a.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        a.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        a.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        a.initialLayout = clear ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        a.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        attachments.push_back(a);
+    }
+
+    VkSubpassDescription subpass = {};
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.colorAttachmentCount = colorAttachmentCount;
+    subpass.pColorAttachments = colorRefs.data();
+    subpass.pDepthStencilAttachment = depth ? &depthRef : nullptr;
+
+    VkRenderPassCreateInfo info = {VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+    info.attachmentCount = (u32)attachments.size();
+    info.pAttachments = attachments.data();
+    info.subpassCount = 1;
+    info.pSubpasses = &subpass;
+
+    return vkCreateRenderPass(Device, &info, nullptr, &out) == VK_SUCCESS;
+}
+
+bool Context::CreateLayerView(VkImageView& out, const Image& img, u32 layer)
+{
+    VkImageViewCreateInfo viewInfo = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+    viewInfo.image = img.Img;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = img.Format;
+    viewInfo.subresourceRange = {(VkImageAspectFlags)(img.Format == VK_FORMAT_D16_UNORM
+        ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT), 0, 1, layer, 1};
+    return vkCreateImageView(Device, &viewInfo, nullptr, &out) == VK_SUCCESS;
+}
+
+bool Context::CreateFramebufferMulti(VkFramebuffer& out, VkRenderPass renderPass,
+                                     const std::vector<VkImageView>& views, u32 width, u32 height)
+{
+    VkFramebufferCreateInfo info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+    info.renderPass = renderPass;
+    info.attachmentCount = (u32)views.size();
+    info.pAttachments = views.data();
+    info.width = width;
+    info.height = height;
+    info.layers = 1;
+    return vkCreateFramebuffer(Device, &info, nullptr, &out) == VK_SUCCESS;
+}
+
+bool Context::CreateFramebuffer(VkFramebuffer& out, VkRenderPass renderPass, const Image& target, u32 layer)
+{
+    // Array targets need a separately-owned single-layer view. Requiring
+    // callers to create and retain that view keeps its lifetime explicit.
+    if (target.Layers != 1 || layer != 0)
+        return false;
+
+    VkFramebufferCreateInfo info = {VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+    info.renderPass = renderPass;
+    info.attachmentCount = 1;
+    info.pAttachments = &target.View;
+    info.width = target.Width;
+    info.height = target.Height;
+    info.layers = 1;
+
+    return vkCreateFramebuffer(Device, &info, nullptr, &out) == VK_SUCCESS;
+}
+
+bool Context::CreateGraphicsPipeline(VkPipeline& out, const GraphicsPipelineConfig& config)
+{
+    VkPipelineShaderStageCreateInfo stages[2] = {};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = config.VertexShader;
+    stages[0].pName = "main";
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = config.FragmentShader;
+    stages[1].pName = "main";
+
+    VkVertexInputBindingDescription binding = {};
+    binding.binding = 0;
+    binding.stride = config.VertexStride;
+    binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    VkPipelineVertexInputStateCreateInfo vertexInput = {VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+    if (config.VertexStride > 0)
+    {
+        vertexInput.vertexBindingDescriptionCount = 1;
+        vertexInput.pVertexBindingDescriptions = &binding;
+        vertexInput.vertexAttributeDescriptionCount = (u32)config.VertexAttributes.size();
+        vertexInput.pVertexAttributeDescriptions = config.VertexAttributes.data();
+    }
+
+    VkPipelineInputAssemblyStateCreateInfo inputAssembly = {VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkPipelineViewportStateCreateInfo viewport = {VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+    viewport.viewportCount = 1;
+    viewport.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo raster = {VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+    raster.polygonMode = VK_POLYGON_MODE_FILL;
+    raster.cullMode = VK_CULL_MODE_NONE;
+    raster.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    raster.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo multisample = {VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+    multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    std::vector<VkPipelineColorBlendAttachmentState> blendAttachments(config.ColorAttachmentCount);
+    for (u32 i = 0; i < config.ColorAttachmentCount; i++)
+    {
+        VkPipelineColorBlendAttachmentState& b = blendAttachments[i];
+        b = {};
+        b.blendEnable = config.Blend ? VK_TRUE : VK_FALSE;
+        b.srcColorBlendFactor = config.SrcBlend;
+        b.dstColorBlendFactor = config.DstBlend;
+        b.colorBlendOp = VK_BLEND_OP_ADD;
+        b.srcAlphaBlendFactor = config.SrcBlend;
+        b.dstAlphaBlendFactor = config.DstBlend;
+        b.alphaBlendOp = VK_BLEND_OP_ADD;
+        b.colorWriteMask = i < config.ColorWriteMasks.size()
+            ? config.ColorWriteMasks[i]
+            : (VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+               VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT);
+    }
+
+    VkPipelineColorBlendStateCreateInfo blend = {VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+    blend.attachmentCount = config.ColorAttachmentCount;
+    blend.pAttachments = blendAttachments.data();
+
+    VkPipelineDepthStencilStateCreateInfo depthState = {VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+    depthState.depthTestEnable = config.DepthTest ? VK_TRUE : VK_FALSE;
+    depthState.depthWriteEnable = config.DepthWrite ? VK_TRUE : VK_FALSE;
+    depthState.depthCompareOp = config.DepthCompare;
+
+    VkDynamicState dynamicStates[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    VkPipelineDynamicStateCreateInfo dynamic = {VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+    dynamic.dynamicStateCount = 2;
+    dynamic.pDynamicStates = dynamicStates;
+
+    VkGraphicsPipelineCreateInfo info = {VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+    info.stageCount = 2;
+    info.pStages = stages;
+    info.pVertexInputState = &vertexInput;
+    info.pInputAssemblyState = &inputAssembly;
+    info.pViewportState = &viewport;
+    info.pRasterizationState = &raster;
+    info.pMultisampleState = &multisample;
+    info.pColorBlendState = &blend;
+    info.pDepthStencilState = &depthState;
+    info.pDynamicState = &dynamic;
+    info.layout = config.Layout;
+    info.renderPass = config.RenderPass;
+    info.subpass = 0;
+
+    return vkCreateGraphicsPipelines(Device, VK_NULL_HANDLE, 1, &info, nullptr, &out) == VK_SUCCESS;
+}
+
+}
+
+}

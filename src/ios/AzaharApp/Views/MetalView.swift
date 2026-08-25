@@ -157,7 +157,11 @@ final class MetalViewUIView: UIView {
 
     @objc private func drawFrame() {
         if az_is_running() && !az_is_paused() {
-            az_present_frame()
+            // Try TWL (melonDS) first - if a DS game is running, blit its framebuffers
+            if !az_twl_present_frame() {
+                // Not in TWL mode, use normal 3DS presentation
+                az_present_frame()
+            }
         }
     }
 

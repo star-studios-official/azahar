@@ -1,0 +1,309 @@
+set (CMAKE_CXX_STANDARD 17)
+
+include(FixInterfaceIncludes)
+
+add_library(core STATIC
+    ARCodeFile.cpp
+    ARDatabaseDAT.cpp
+    AREngine.cpp
+    ARM.cpp
+    ARM_InstrTable.h
+    ARMInterpreter.cpp
+    ARMInterpreter_ALU.cpp
+    ARMInterpreter_Branch.cpp
+    ARMInterpreter_LoadStore.cpp
+    CP15.cpp
+    CRC32.cpp
+    DMA.cpp
+    DMA_Timings.h
+    DMA_Timings.cpp
+    DSi.cpp
+    DSi_AES.cpp
+    DSi_Camera.cpp
+    DSi_DSP.cpp
+    DSi_I2C.cpp
+    DSi_I2S.cpp
+    DSi_NAND.cpp
+    DSi_NDMA.cpp
+    DSi_NWifi.cpp
+    DSi_SD.cpp
+    DSi_SPI_TSC.cpp
+    FATIO.cpp
+    FATStorage.cpp
+    FIFO.h
+    GBACart.cpp
+    GBACartMotionPak.cpp
+    GPU.cpp
+    GPU_Soft.cpp
+    GPU2D.cpp
+    GPU2D_Soft.cpp
+    GPU3D.cpp
+    GPU3D_Soft.cpp
+    GPU3D_Texcache.cpp
+    GPU3D_Texcache.h
+    Mic.cpp
+    NDS.cpp
+    NDSCart.cpp
+    Platform.h
+    ROMList.h
+    ROMList.cpp
+    FreeBIOS.h
+    FreeBIOS.cpp
+    RTC.cpp
+    Savestate.cpp
+    SPI.cpp
+    SPI_Firmware.cpp
+    SPU.cpp
+    types.h
+    Utils.cpp
+    Utils.h
+    Wifi.cpp
+    WifiAP.cpp
+
+    DSP_HLE/UcodeBase.cpp
+    DSP_HLE/AACUcode.cpp
+    DSP_HLE/G711Ucode.cpp
+    DSP_HLE/GraphicsUcode.cpp
+
+    NDSCart/CartCommon.cpp
+    NDSCart/CartRetail.cpp
+    NDSCart/CartRetailNAND.cpp
+    NDSCart/CartRetailIR.cpp
+    NDSCart/CartRetailBT.cpp
+    NDSCart/CartSD.cpp
+    NDSCart/CartHomebrew.cpp
+    NDSCart/CartR4.cpp
+
+    fatfs/ff.c
+    fatfs/ffsystem.c
+    fatfs/ffunicode.c
+    fatfs/ffconf.h
+
+    sha1/sha1.c
+    tiny-AES-c/aes.c
+    xxhash/xxhash.c
+
+    blip-buf/blip_buf.c)
+
+if (ENABLE_GDBSTUB)
+    message(NOTICE "Enabling GDB stub")
+    target_sources(core PRIVATE
+        debug/GdbStub.cpp
+        debug/GdbProto.cpp
+        debug/GdbCmds.cpp
+    )
+endif()
+
+if (ENABLE_OGLRENDERER)
+    add_subdirectory(OpenGL_shaders)
+    target_sources(core PRIVATE
+        GPU_OpenGL.cpp
+        GPU2D_OpenGL.cpp
+        GPU3D_OpenGL.cpp
+        GPU3D_Compute.cpp
+        GPU3D_TexcacheOpenGL.cpp
+        GPU3D_TexcacheOpenGL.h
+        OpenGLSupport.cpp)
+
+    target_compile_definitions(core PUBLIC OGLRENDERER_ENABLED)
+endif()
+
+if (ENABLE_VKRENDERER)
+    # Vulkan is loaded dynamically at runtime; only headers are needed to build.
+    find_package(VulkanHeaders CONFIG QUIET)
+    if (NOT TARGET Vulkan::Headers)
+        find_path(VULKAN_INCLUDE_DIR vulkan/vulkan.h REQUIRED)
+    endif()
+
+    # glslang compiles the compute shaders to SPIR-V at runtime. Prefer its
+    # CMake config package (Homebrew / vcpkg / Vulkan SDK); fall back to
+    # locating the libraries directly for distro packages (e.g. Ubuntu's
+    # glslang-dev) that ship the libs and headers but no glslangConfig.cmake.
+    find_package(glslang CONFIG QUIET)
+
+    target_sources(core PRIVATE
+        VulkanSupport.cpp
+        VulkanSupport.h
+        GPU3D_ComputeVulkan.cpp
+        GPU3D_ComputeVulkan.h
+        GPU3D_TexcacheVulkan.cpp
+        GPU3D_TexcacheVulkan.h
+        GPU2D_Vulkan.cpp
+        GPU2D_Vulkan.h
+        GPU_Vulkan.cpp
+        GPU_Vulkan.h)
+
+    if (TARGET Vulkan::Headers)
+        target_link_libraries(core PUBLIC Vulkan::Headers)
+    else()
+        target_include_directories(core PUBLIC "${VULKAN_INCLUDE_DIR}")
+    endif()
+
+    if (TARGET glslang::glslang)
+        target_link_libraries(core PRIVATE glslang::glslang)
+        if (TARGET glslang::SPIRV)
+            target_link_libraries(core PRIVATE glslang::SPIRV)
+        endif()
+        if (TARGET glslang::glslang-default-resource-limits)
+            target_link_libraries(core PRIVATE glslang::glslang-default-resource-limits)
+        endif()
+    else()
+        # no CMake config (distro packaging): locate the archives by name.
+        # SPIRV depends on glslang, so link SPIRV first for static libs.
+        find_library(GLSLANG_SPIRV_LIB SPIRV REQUIRED)
+        find_library(GLSLANG_LIB glslang REQUIRED)
+        target_link_libraries(core PRIVATE ${GLSLANG_SPIRV_LIB} ${GLSLANG_LIB})
+        # optional components some glslang versions split into separate libs,
+        # in rough dependency order (dependents before dependencies)
+        foreach (_glcomp glslang-default-resource-limits MachineIndependent
+                         GenericCodeGen OSDependent OGLCompiler SPVRemapper
+                         SPIRV-Tools-opt SPIRV-Tools)
+            find_library(GLSLANG_${_glcomp}_LIB ${_glcomp})
+            if (GLSLANG_${_glcomp}_LIB)
+                target_link_libraries(core PRIVATE ${GLSLANG_${_glcomp}_LIB})
+            endif()
+        endforeach()
+        find_path(GLSLANG_INCLUDE_DIR glslang/Public/ShaderLang.h)
+        if (GLSLANG_INCLUDE_DIR)
+            target_include_directories(core PRIVATE "${GLSLANG_INCLUDE_DIR}")
+        endif()
+    endif()
+
+    target_compile_definitions(core PUBLIC VKRENDERER_ENABLED)
+endif()
+
+if (ENABLE_JIT)
+    enable_language(ASM)
+
+    target_sources(core PRIVATE
+        ARM_InstrInfo.cpp
+
+        ARMJIT.cpp
+        ARMJIT_Memory.cpp
+        ARMJIT_Global.cpp
+
+        dolphin/CommonFuncs.cpp)
+    
+    if (WIN32)
+        # Required for memory mapping-related functions introduced in Windows 8
+        target_compile_definitions(core PRIVATE -D_WIN32_WINNT=_WIN32_WINNT_WIN8)
+        target_link_libraries(core PRIVATE onecore)
+    endif()
+
+    if (CMAKE_SYSTEM_NAME STREQUAL "OpenBSD")
+        target_link_options(core PUBLIC -Wl,-z,wxneeded)
+    endif()
+
+    if (ARCHITECTURE STREQUAL x86_64)
+        target_sources(core PRIVATE
+            dolphin/x64ABI.cpp
+            dolphin/x64CPUDetect.cpp
+            dolphin/x64Emitter.cpp
+
+            ARMJIT_x64/ARMJIT_Compiler.cpp
+            ARMJIT_x64/ARMJIT_ALU.cpp
+            ARMJIT_x64/ARMJIT_LoadStore.cpp
+            ARMJIT_x64/ARMJIT_Branch.cpp
+
+            ARMJIT_x64/ARMJIT_Linkage.S)
+    endif()
+    if (ARCHITECTURE STREQUAL ARM64)
+        target_sources(core PRIVATE
+            dolphin/Arm64Emitter.cpp
+            dolphin/MathUtil.cpp
+
+            ARMJIT_A64/ARMJIT_Compiler.cpp
+            ARMJIT_A64/ARMJIT_ALU.cpp
+            ARMJIT_A64/ARMJIT_LoadStore.cpp
+            ARMJIT_A64/ARMJIT_Branch.cpp
+
+            ARMJIT_A64/ARMJIT_Linkage.S)
+    endif()
+endif()
+
+target_include_directories(core INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+
+set(MELONDS_VERSION_SUFFIX "$ENV{MELONDS_VERSION_SUFFIX}" CACHE STRING "Suffix to add to displayed melonDS version")
+option(MELONDS_EMBED_BUILD_INFO "Embed detailed build info into the binary" OFF)
+set(MELONDS_GIT_BRANCH "$ENV{MELONDS_GIT_BRANCH}" CACHE STRING "The Git branch used for this build")
+set(MELONDS_GIT_HASH "$ENV{MELONDS_GIT_HASH}" CACHE STRING "The hash of the Git commit")
+set(MELONDS_BUILD_PROVIDER "$ENV{MELONDS_BUILD_PROVIDER}" CACHE STRING "The name of the provider of this build")
+
+if (MELONDS_EMBED_BUILD_INFO)
+    target_compile_definitions(core PUBLIC MELONDS_EMBED_BUILD_INFO)
+    if (NOT MELONDS_GIT_BRANCH OR NOT MELONDS_GIT_HASH OR NOT MELONDS_BUILD_PROVIDER)
+        message(FATAL_ERROR "When embedding build information, all fields must be filled out. See src/CMakeLists.txt.")
+    endif()
+endif()
+
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/version.h.in" "${CMAKE_CURRENT_BINARY_DIR}/version.h")
+target_sources(core PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/version.h")
+target_include_directories(core PUBLIC "${CMAKE_CURRENT_BINARY_DIR}")
+
+set(BUILD_SHARED_LIBS OFF)
+add_subdirectory(teakra EXCLUDE_FROM_ALL)
+# Workaround for building teakra with -O0 on Windows either failing or hanging forever
+target_compile_options(teakra PRIVATE "$<$<CONFIG:DEBUG>:-Og>")
+target_link_libraries(core PRIVATE teakra)
+
+if (NOT MSVC)
+    # MSVC has its own compiler flag syntax; if we ever support it,
+    # be sure to add equivalent flags here.
+
+    target_compile_options(core PUBLIC -fwrapv)
+
+    target_compile_options(core PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:-Wno-invalid-offsetof>")
+    # These warnings are excessive, and are only triggered in the ARMJIT code
+    # (which is fundamentally non-portable, so this is fine)
+endif()
+
+# Fix xxhash compile errors when using -Og
+# See https://github.com/Cyan4973/xxHash/blob/136cc1f8fe4d5ea62a7c16c8424d4fa5158f6d68/README.md?plain=1#L159-L163
+target_compile_definitions(core PRIVATE $<$<CONFIG:DEBUG>:XXH_NO_INLINE_HINTS=1>)
+
+find_library(m MATH_LIBRARY)
+
+if (MATH_LIBRARY)
+    target_link_libraries(core PRIVATE ${MATH_LIBRARY})
+endif()
+
+if (ENABLE_JIT)
+    target_compile_definitions(core PUBLIC JIT_ENABLED)
+
+    if (ENABLE_JIT_PROFILING)
+        include(../cmake/FindVTune.cmake)
+        add_definitions(-DJIT_PROFILING_ENABLED)
+    endif()
+endif()
+
+if (WIN32)
+    target_link_libraries(core PRIVATE ole32 comctl32 wsock32 ws2_32)
+
+    if (NOT MINGW)
+        find_path(DIRENT_INCLUDE_DIRS "dirent.h")
+        target_include_directories(core PUBLIC ${DIRENT_INCLUDE_DIRS})
+    endif()
+elseif(NOT APPLE AND NOT HAIKU)
+    check_library_exists(rt shm_open "" NEED_LIBRT)
+    if (NEED_LIBRT)
+        target_link_libraries(core PRIVATE rt)
+    endif()
+elseif(HAIKU)
+    target_link_libraries(core PRIVATE network)
+endif()
+
+if (ENABLE_JIT_PROFILING)
+    target_include_directories(core PRIVATE "${VTUNE_INCLUDE_DIR}")
+    target_link_libraries(core PRIVATE "${VTUNE_LIBRARY}")
+endif()
+
+#if(CMAKE_BUILD_TYPE MATCHES "Debug")
+#  set(
+#    CMAKE_C_FLAGS
+#    "${CMAKE_C_FLAGS} -fsanitize=undefined -fsanitize=address"
+#  )
+#  target_link_options(core
+#    BEFORE PUBLIC -fsanitize=undefined PUBLIC -fsanitize=address
+#  )
+#endif()
+

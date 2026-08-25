@@ -88,6 +88,8 @@ add_library(citra_core STATIC EXCLUDE_FROM_ALL
     file_sys/nds_smdh.cpp
     file_sys/nds_smdh.h
     file_sys/otp.cpp
+    twl/twl_core.cpp
+    twl/twl_core.h
     file_sys/otp.h
     file_sys/patch.cpp
     file_sys/patch.h
@@ -524,6 +526,8 @@ create_target_directory_groups(citra_core)
 
 target_link_libraries(citra_core PUBLIC citra_common PRIVATE audio_core citra_network video_core)
 target_link_libraries(citra_core PRIVATE Boost::boost Boost::serialization Boost::iostreams httplib)
+target_link_libraries(citra_core PRIVATE core)
+target_include_directories(citra_core PRIVATE ${CMAKE_SOURCE_DIR}/src/core_melonds/src)
 target_link_libraries(citra_core PUBLIC dds-ktx PRIVATE cryptopp fmt lodepng open_source_archives)
 
 if (ENABLE_RETRO_ACHIEVEMENTS)

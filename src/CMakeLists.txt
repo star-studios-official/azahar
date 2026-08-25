@@ -192,6 +192,31 @@ if(ENABLE_BUILTIN_KEYBLOB)
 endif()
 
 add_subdirectory(common)
+
+# Configure melonDS for embedded use (no JIT on iOS, Vulkan via MoltenVK)
+set(ENABLE_JIT OFF CACHE BOOL "Disable melonDS JIT (not available on iOS)" FORCE)
+set(ENABLE_OGLRENDERER OFF CACHE BOOL "Disable melonDS OpenGL (use Vulkan via MoltenVK)" FORCE)
+set(ENABLE_VKRENDERER ON CACHE BOOL "Enable melonDS Vulkan renderer" FORCE)
+set(ENABLE_GDBSTUB OFF CACHE BOOL "Disable melonDS GDB stub" FORCE)
+set(BUILD_TESTING OFF CACHE BOOL "Disable melonDS tests" FORCE)
+
+# Point melonDS at Azahar's bundled Vulkan headers (melonDS fallback path)
+if (NOT VULKAN_INCLUDE_DIR)
+    set(VULKAN_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/externals/vulkan-headers/include" CACHE PATH "Vulkan include dir for melonDS")
+endif()
+
+# melonDS checks for glslang::glslang / glslang::SPIRV targets via
+# "if (TARGET ...)".  Azahar builds glslang in externals/ which runs
+# before src/, so these targets should already exist.  If not (e.g.
+# USE_SYSTEM_GLSLANG), create imported wrappers.
+if (NOT TARGET glslang::glslang AND TARGET glslang)
+    add_library(glslang::glslang ALIAS glslang)
+endif()
+if (NOT TARGET glslang::SPIRV AND TARGET SPIRV)
+    add_library(glslang::SPIRV ALIAS SPIRV)
+endif()
+
+add_subdirectory(core_melonds/src)
 add_subdirectory(core)
 add_subdirectory(video_core)
 add_subdirectory(audio_core)

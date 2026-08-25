@@ -24,6 +24,7 @@
 #include "core/hle/service/apt/apt_u.h"
 #include "core/hle/service/apt/bcfnt/bcfnt.h"
 #include "core/hle/service/apt/ns.h"
+#include "core/hle/service/apt/ns.h"
 #include "core/hle/service/apt/ns_c.h"
 #include "core/hle/service/apt/ns_s.h"
 #include "core/hle/service/cfg/cfg.h"
@@ -131,6 +132,160 @@ void Module::NSInterface::RebootSystemClean(Kernel::HLERequestContext& ctx) {
     LOG_INFO(Service_APT, "called");
 
     apt->system.RequestReset();
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
+/// Determines if a title ID belongs to a TWL (DS/DSi) application.
+/// TWL application title IDs have high word 0x00030005 or 0x00030015
+/// (DSiWare). The gamecard uses high=0 with low=0 to indicate
+/// the inserted card.
+static bool IsTWLTitle(u64 title_id) {
+    const u32 high = static_cast<u32>(title_id >> 32);
+    // TWL application categories
+    if (high == 0x00030005 || high == 0x00030015 || high == 0x00030017 ||
+        high == 0x00030019) {
+        return true;
+    }
+    return false;
+}
+
+/// Checks whether the currently inserted game card is a TWL ROM.
+static bool IsGameCardTWL(Core::System& system) {
+    const auto& cartridge = system.GetCartridge();
+    if (cartridge.empty()) {
+        return false;
+    }
+    const std::string ext = FileUtil::GetExtensionFromFilename(cartridge);
+    return (ext == "nds" || ext == "dsi");
+}
+
+void Module::NSInterface::LaunchFIRM(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const auto title_id = rp.Pop<u64>();
+    rp.Pop<u32>(); // unused
+
+    LOG_WARNING(Service_APT, "called title_id={:016X}", title_id);
+
+    // Determine if this is a TWL FIRM launch.
+    // On real HW, NS looks up the required FIRM for the title.
+    // For TWL titles (or gamecard with TWL ROM), it loads TWL_FIRM.
+    // In the emulator we redirect to the melonDS backend.
+    bool needs_twl = false;
+    u64 effective_title_id = title_id;
+
+    if (title_id == 0) {
+        // title_id == 0 means gamecard
+        if (IsGameCardTWL(apt->system)) {
+            needs_twl = true;
+        }
+    } else if (IsTWLTitle(title_id)) {
+        needs_twl = true;
+    }
+
+    if (needs_twl) {
+        const auto& cartridge = apt->system.GetCartridge();
+        if (!cartridge.empty()) {
+            LOG_INFO(Service_APT, "TWL FIRM launch requested, redirecting to melonDS: {}",
+                      cartridge);
+            apt->system.RequestTWLLaunch(cartridge);
+        } else {
+            LOG_ERROR(Service_APT, "TWL FIRM launch requested but no game card inserted");
+        }
+    } else {
+        // CTR FIRM - for now just do a normal title launch or reset
+        LOG_WARNING(Service_APT, "CTR FIRM launch for title {:016X}, doing reset",
+                    effective_title_id);
+        apt->system.RequestReset();
+    }
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
+    rb.Push(ResultSuccess);
+}
+
+void Module::NSInterface::LaunchTitle(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const auto title_id = rp.Pop<u64>();
+    const auto flags = rp.Pop<u32>();
+
+    LOG_WARNING(Service_APT, "called title_id={:016X} flags=0x{:08X}", title_id, flags);
+
+    // MediaType is determined by the title ID:
+    // - GameCard if title_id == 0
+    // - NAND if high word has system flag (0x00040138, 0x00040130, etc.)
+    // - SD otherwise
+    FS::MediaType media_type;
+    if (title_id == 0) {
+        media_type = FS::MediaType::GameCard;
+    } else {
+        const u32 high = static_cast<u32>(title_id >> 32);
+        if (high & 0x10) { // system title flag
+            media_type = FS::MediaType::NAND;
+        } else {
+            media_type = FS::MediaType::SDMC;
+        }
+    }
+
+    // Check if this is a TWL title being launched
+    if (title_id != 0 && IsTWLTitle(title_id)) {
+        const auto& cartridge = apt->system.GetCartridge();
+        if (!cartridge.empty()) {
+            LOG_INFO(Service_APT, "TWL title launch via LaunchTitle, redirecting to melonDS");
+            apt->system.RequestTWLLaunch(cartridge);
+            IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
+            rb.Push(ResultSuccess);
+            rb.Push<u32>(0); // PID placeholder
+            return;
+        }
+    }
+
+    // For system modules (which is what Home Menu uses this for),
+    // try to load from NAND.
+    auto process = NS::LaunchTitle(apt->system, media_type, title_id);
+    u32 pid = 0;
+    if (process) {
+        pid = process->GetProcessID();
+    }
+
+    IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
+    rb.Push(ResultSuccess);
+    rb.Push<u32>(pid);
+}
+
+void Module::NSInterface::LaunchApplicationFIRM(Kernel::HLERequestContext& ctx) {
+    IPC::RequestParser rp(ctx);
+    const auto title_id = rp.Pop<u64>();
+    const auto flags = rp.Pop<u32>();
+
+    LOG_WARNING(Service_APT, "called title_id={:016X} flags=0x{:08X}", title_id, flags);
+
+    // Similar to LaunchFIRM but with flag checks.
+    bool needs_twl = false;
+
+    if (title_id == 0) {
+        if (IsGameCardTWL(apt->system)) {
+            needs_twl = true;
+        }
+    } else if (IsTWLTitle(title_id)) {
+        needs_twl = true;
+    }
+
+    if (needs_twl) {
+        const auto& cartridge = apt->system.GetCartridge();
+        if (!cartridge.empty()) {
+            LOG_INFO(Service_APT,
+                      "TWL FIRM launch via LaunchApplicationFIRM, redirecting to melonDS: {}",
+                      cartridge);
+            apt->system.RequestTWLLaunch(cartridge);
+        } else {
+            LOG_ERROR(Service_APT,
+                       "TWL FIRM launch via LaunchApplicationFIRM but no game card inserted");
+        }
+    } else {
+        LOG_WARNING(Service_APT, "CTR FIRM launch for title {:016X}", title_id);
+        apt->system.RequestReset();
+    }
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);

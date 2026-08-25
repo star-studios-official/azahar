@@ -16,6 +16,8 @@
 #include <string>
 
 #include <QuartzCore/QuartzCore.h>
+#import <Metal/Metal.h>
+#import <AudioToolbox/AudioToolbox.h>
 
 #include "common/arch.h"
 #include "common/aarch64/cpu_detect.h"
@@ -30,6 +32,7 @@
 #include "common/settings.h"
 #include "common/string_util.h"
 #include "core/core.h"
+#include "core/twl/twl_core.h"
 #include "core/cheats/cheat_base.h"
 #include "core/frontend/applets/default_applets.h"
 #include "core/frontend/camera/factory.h"
@@ -77,6 +80,27 @@ std::mutex running_mutex;
 std::condition_variable running_cv;
 
 std::atomic<int> last_result{AZ_CORE_ERROR_UNKNOWN};
+std::string pending_twl_rom_path; ///< Set when TWLLaunchRequested to pass ROM path to frontend
+
+// TWL input state (set by az_button_event / az_analog_event, read by TWL loop)
+static std::atomic<u16> twl_button_state{0};
+static std::atomic<s16> twl_touch_x{0};
+static std::atomic<s16> twl_touch_y{0};
+static std::atomic<bool> twl_touch_pressed{false};
+static std::atomic<bool> twl_touch_active{false};
+
+// Global pointer to the running system, set in RunCitra for TWL input forwarding
+static Core::System* g_active_system = nullptr;
+
+// ---- TWL Audio Ring Buffer ----
+// melonDS runs its SPU on a separate thread and pushes stereo PCM16 samples here.
+// An AudioUnit callback on the main thread pulls from this buffer.
+static constexpr size_t TWL_AUDIO_RING_SIZE = 16384; // must be power of 2
+static s16 twl_audio_ring[TWL_AUDIO_RING_SIZE * 2]; // interleaved stereo
+static std::atomic<size_t> twl_audio_write_pos{0};
+static std::atomic<size_t> twl_audio_read_pos{0};
+static AudioComponentInstance twl_audio_unit = nullptr;
+static bool twl_audio_started = false;
 
 // Pending surface layers (set before RunCitra creates the window)
 CAMetalLayer* pending_primary_layer = nullptr;
@@ -228,6 +252,7 @@ static void RunCitra(const std::string& filepath) {
     }
 
     Core::System& system = Core::System::GetInstance();
+    g_active_system = &system;
 
     if (!inserted_cartridge.empty()) {
         LOG_INFO(Frontend, "Inserting cartridge: {}", inserted_cartridge);
@@ -332,6 +357,55 @@ static void RunCitra(const std::string& filepath) {
                 continue;
             }
             if (result == Core::System::ResultStatus::ShutdownRequested) {
+                // Check if this is a TWL FIRM launch (DS/DSi game)
+                auto twl_path = system.TakePendingTWLPath();
+                if (!twl_path.empty()) {
+                    LOG_INFO(Frontend, "TWL FIRM launch requested, starting melonDS for: {}", twl_path);
+
+                    // Start the melonDS TWL core
+                    if (system.StartTWLCore(twl_path)) {
+                        LOG_INFO(Frontend, "melonDS core started, running TWL emulation loop");
+
+                        auto* twl = system.GetTWLCore();
+
+                        // Reset TWL input state
+                        twl_button_state.store(0);
+                        twl_touch_pressed.store(false);
+                        twl_touch_active.store(false);
+
+                        // Start TWL audio output via AudioUnit
+                        twl_audio_start();
+                        twl->SetAudioCallback(twl_audio_push_samples);
+                        LOG_INFO(Frontend, "TWL audio callback set (rate={})", twl->GetAudioSampleRate());
+
+                        // Run melonDS frames until it stops
+                        while (!stop_run) {
+                            if (!twl || !twl->IsRunning()) {
+                                LOG_INFO(Frontend, "melonDS core stopped");
+                                break;
+                            }
+
+                            // Forward input from Azahar HID to melonDS
+                            twl->SetButtonState(twl_button_state.load());
+                            if (twl_touch_active.load()) {
+                                TWL::TouchState touch;
+                                touch.pressed = twl_touch_pressed.load();
+                                touch.x = static_cast<u16>(twl_touch_x.load());
+                                touch.y = static_cast<u16>(twl_touch_y.load());
+                                twl->SetTouchState(touch);
+                            }
+                        }
+
+                        twl_audio_stop();
+                        system.StopTWLCore();
+                        LOG_INFO(Frontend, "melonDS emulation ended, returning to 3DS");
+                        // Resume 3DS emulation (go back to Home Menu)
+                        continue;
+                    } else {
+                        LOG_ERROR(Frontend, "Failed to start melonDS core");
+                    }
+                }
+
                 LOG_INFO(Frontend, "Shutdown requested by system");
                 last_result.store(static_cast<int>(result));
                 return;
@@ -355,6 +429,7 @@ static void RunCitra(const std::string& filepath) {
 }
 
 static void TryShutdown() {
+    g_active_system = nullptr;
     if (window) {
         window->DoneCurrent();
     }
@@ -379,6 +454,186 @@ static void TryShutdown() {
 
 int az_get_last_result(void) {
     return last_result.load();
+}
+
+// ---- TWL Audio Output ----
+static OSStatus twl_audio_render_callback(void* inRefCon, AudioUnitRenderActionFlags* ioActionFlags,
+                                         const AudioTimeStamp* inTimeStamp, UInt32 inBusNumber,
+                                         UInt32 inNumberFrames, AudioBufferList* ioData) {
+    s16* out = static_cast<s16*>(ioData->mBuffers[0].mData);
+    size_t to_read = inNumberFrames; // frames = stereo sample pairs
+    size_t avail = twl_audio_write_pos.load(std::memory_order_acquire) -
+                   twl_audio_read_pos.load(std::memory_order_acquire);
+    if (to_read > avail) to_read = avail;
+    size_t rp = twl_audio_read_pos.load(std::memory_order_acquire);
+    for (size_t i = 0; i < to_read; i++) {
+        size_t idx = ((rp + i) & (TWL_AUDIO_RING_SIZE - 1)) * 2;
+        out[i * 2] = twl_audio_ring[idx];
+        out[i * 2 + 1] = twl_audio_ring[idx + 1];
+    }
+    twl_audio_read_pos.store(rp + to_read, std::memory_order_release);
+    // Zero remaining frames if ring buffer underrun
+    if (to_read < inNumberFrames) {
+        std::memset(out + to_read * 2, 0, (inNumberFrames - to_read) * 2 * sizeof(s16));
+    }
+    return noErr;
+}
+
+static void twl_audio_push_samples(const s16* samples, std::size_t num_samples, u32 sample_rate) {
+    size_t wp = twl_audio_write_pos.load(std::memory_order_relaxed);
+    size_t space = TWL_AUDIO_RING_SIZE - (wp - twl_audio_read_pos.load(std::memory_order_acquire));
+    if (num_samples > space) num_samples = space;
+    for (size_t i = 0; i < num_samples; i++) {
+        size_t idx = ((wp + i) & (TWL_AUDIO_RING_SIZE - 1)) * 2;
+        twl_audio_ring[idx] = samples[i * 2];
+        twl_audio_ring[idx + 1] = samples[i * 2 + 1];
+    }
+    twl_audio_write_pos.store(wp + num_samples, std::memory_order_release);
+}
+
+static void twl_audio_start() {
+    if (twl_audio_started) return;
+
+    AudioComponentDescription desc = {};
+    desc.componentType = kAudioUnitType_Output;
+    desc.componentSubType = kAudioUnitSubType_RemoteIO;
+    desc.componentManufacturer = kAudioUnitManufacturer_Apple;
+
+    AudioComponent comp = AudioComponentFindNext(NULL, &desc);
+    if (!comp) {
+        LOG_ERROR(Frontend, "TWL audio: AudioComponentFindNext failed");
+        return;
+    }
+
+    AudioComponentInstanceNew(comp, &twl_audio_unit);
+
+    AURenderCallbackStruct cb = {};
+    cb.inputProc = twl_audio_render_callback;
+    cb.inputProcRefCon = nullptr;
+    AudioUnitSetProperty(twl_audio_unit, kAudioOutputUnitProperty_SetRenderCallback,
+                         kAudioUnitScope_Input, 0, &cb, sizeof(cb));
+
+    // Configure for 48000 Hz stereo output
+    AudioStreamBasicDescription fmt = {};
+    fmt.mSampleRate = 48000.0;
+    fmt.mFormatID = kAudioFormatLinearPCM;
+    fmt.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
+    fmt.mFramesPerPacket = 1;
+    fmt.mChannelsPerFrame = 2;
+    fmt.mBitsPerChannel = 16;
+    fmt.mBytesPerFrame = 4;
+    fmt.mBytesPerPacket = 4;
+    AudioUnitSetProperty(twl_audio_unit, kAudioUnitProperty_StreamFormat,
+                         kAudioUnitScope_Output, 0, &fmt, sizeof(fmt));
+
+    AudioUnitInitialize(twl_audio_unit);
+    AudioOutputUnitStart(twl_audio_unit);
+    twl_audio_started = true;
+    LOG_INFO(Frontend, "TWL audio unit started (48000 Hz stereo)");
+}
+
+static void twl_audio_stop() {
+    if (!twl_audio_started || !twl_audio_unit) return;
+    AudioOutputUnitStop(twl_audio_unit);
+    AudioUnitUninitialize(twl_audio_unit);
+    AudioComponentInstanceDispose(twl_audio_unit);
+    twl_audio_unit = nullptr;
+    twl_audio_started = false;
+    twl_audio_write_pos.store(0);
+    twl_audio_read_pos.store(0);
+    LOG_INFO(Frontend, "TWL audio unit stopped");
+}
+
+/// Check if a TWL (DS/DSi) ROM launch was requested by the Home Menu.
+/// Returns true and fills out_path if a TWL launch is pending.
+/// out_path must be a buffer of at least 1024 bytes.
+bool az_check_twl_launch(char* out_path, int out_path_size) {
+    if (pending_twl_rom_path.empty() || !out_path || out_path_size <= 0) {
+        return false;
+    }
+    const auto& path = pending_twl_rom_path;
+    if (static_cast<int>(path.size()) >= out_path_size) {
+        return false;
+    }
+    std::memcpy(out_path, path.c_str(), path.size());
+    out_path[path.size()] = '\0';
+    pending_twl_rom_path.clear();
+    return true;
+}
+
+// melonDS BIOS file paths (indexed by bios_type)
+static std::string melonds_bios_paths[5]; // ARM9, ARM7, DSiARM9, DSiARM7, Firmware
+
+void az_set_melonds_bios(int bios_type, const char* path) {
+    if (bios_type >= 0 && bios_type < 5 && path) {
+        melonds_bios_paths[bios_type] = path;
+        LOG_INFO(Frontend, "melonDS BIOS[{}] set to: {}", bios_type, path);
+    }
+}
+
+const char* az_get_melonds_bios(int bios_type) {
+    if (bios_type >= 0 && bios_type < 5 && !melonds_bios_paths[bios_type].empty()) {
+        return melonds_bios_paths[bios_type].c_str();
+    }
+    return nullptr;
+}
+
+/// Run a DS/DSi ROM directly via melonDS without booting into the 3DS Home Menu.
+/// Called from Swift when a .nds/.srl file is loaded from the game library.
+void az_run_twl(const char* nds_rom_path) {
+    if (!nds_rom_path || !*nds_rom_path) {
+        LOG_ERROR(Frontend, "az_run_twl called with null/empty path");
+        last_result.store(AZ_CORE_ERROR_UNKNOWN);
+        return;
+    }
+
+    LOG_INFO(Frontend, "Direct TWL launch: {}", nds_rom_path);
+
+    Core::System& system = Core::System::GetInstance();
+    g_active_system = &system;
+
+    SCOPE_EXIT({ g_active_system = nullptr; });
+
+    if (!system.StartTWLCore(nds_rom_path)) {
+        LOG_ERROR(Frontend, "Failed to start melonDS core for: {}", nds_rom_path);
+        last_result.store(AZ_CORE_ERROR_UNKNOWN);
+        return;
+    }
+
+    LOG_INFO(Frontend, "melonDS core started, running emulation loop");
+
+    auto* twl = system.GetTWLCore();
+
+    // Reset TWL input state
+    twl_button_state.store(0);
+    twl_touch_pressed.store(false);
+    twl_touch_active.store(false);
+
+    // Set up audio callback and start AudioUnit
+    twl->SetAudioCallback(twl_audio_push_samples);
+    twl_audio_start();
+
+    while (!stop_run) {
+        if (!twl || !twl->IsRunning()) {
+            LOG_INFO(Frontend, "melonDS emulation ended");
+            break;
+        }
+
+        // Forward input
+        twl->SetButtonState(twl_button_state.load());
+        if (twl_touch_active.load()) {
+            TWL::TouchState touch;
+            touch.pressed = twl_touch_pressed.load();
+            touch.x = static_cast<u16>(twl_touch_x.load());
+            touch.y = static_cast<u16>(twl_touch_y.load());
+            twl->SetTouchState(touch);
+        }
+    }
+
+    twl_audio_stop();
+    system.StopTWLCore();
+    LOG_INFO(Frontend, "melonDS emulation ended");
+    last_result.store(0);
 }
 
 void az_run(const char* path) {
@@ -524,6 +779,97 @@ void az_present_frame(void) {
     // the TextureMailbox; nothing to do from the frontend display link.
 }
 
+/// Blit melonDS framebuffers (top + bottom, 256x192 each, RGBA8888) to the Metal layer.
+/// Called from the MetalView display link when a DS game is running.
+/// Returns true if a frame was blitted.
+bool az_twl_present_frame(void) {
+    auto* twl = g_active_system ? g_active_system->GetTWLCore() : nullptr;
+    if (!twl || !twl->IsRunning()) return false;
+    if (!pending_primary_layer) return false;
+
+    @autoreleasepool {
+        CAMetalLayer* layer = pending_primary_layer;
+        id<MTLDevice> device = layer.device;
+        if (!device) return false;
+
+        id<MTLCommandQueue> queue = [device newCommandQueue];
+        if (!queue) return false;
+
+        // Get the current drawable
+        id<CAMetalDrawable> drawable = [layer nextDrawable];
+        if (!drawable) return false;
+
+        // Get melonDS screen pointers
+        const u32* top = twl->GetTopScreen();
+        const u32* bottom = twl->GetBottomScreen();
+        if (!top || !bottom) return false;
+
+        // Create textures from CPU framebuffers (256x192 each)
+        MTLTextureDescriptor* texDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                                                                          width:256
+                                                                                         height:192
+                                                                                      mipmapped:NO];
+        texDesc.usage = MTLTextureUsageShaderRead;
+        texDesc.storageMode = MTLStorageModeManaged;
+
+        id<MTLTexture> topTex = [device newTextureWithDescriptor:texDesc];
+        id<MTLTexture> bottomTex = [device newTextureWithDescriptor:texDesc];
+
+        // Upload top screen - melonDS outputs RGBA8888, Metal expects BGRA8888
+        // We need to swap R and B channels
+        std::array<u32, 256 * 192> top_swapped, bottom_swapped;
+        for (size_t i = 0; i < 256 * 192; i++) {
+            u32 px = top[i];
+            top_swapped[i] = (px & 0xFF00FF00) | ((px & 0xFF) << 16) | ((px >> 16) & 0xFF);
+            px = bottom[i];
+            bottom_swapped[i] = (px & 0xFF00FF00) | ((px & 0xFF) << 16) | ((px >> 16) & 0xFF);
+        }
+
+        [topTex replaceRegion:MTLRegionMake2D(0, 0, 256, 192)
+               mipmapLevel:0
+                 withBytes:top_swapped.data()
+               bytesPerRow:256 * 4];
+        [bottomTex replaceRegion:MTLRegionMake2D(0, 0, 256, 192)
+               mipmapLevel:0
+             withBytes:bottom_swapped.data()
+               bytesPerRow:256 * 4];
+
+        // Copy both screens to the drawable texture (stacked vertically)
+        id<MTLBlitCommandEncoder> blit = [queue commandBuffer];
+        id<MTLBlitCommandEncoder> encoder = [blit blitCommandEncoder];
+
+        // Top screen at origin
+        [encoder copyFromTexture:topTex
+                    sourceSlice:0
+                    sourceLevel:0
+                   sourceOrigin:MTLOriginMake(0, 0, 0)
+                     sourceSize:MTLSizeMake(256, 192, 1)
+                      toTexture:drawable.texture
+               destinationSlice:0
+               destinationLevel:0
+              destinationOrigin:MTLOriginMake(0, 0, 0)];
+
+        // Bottom screen below top screen
+        u32 drawW = static_cast<u32>(layer.drawableSize.width);
+        u32 drawH = static_cast<u32>(layer.drawableSize.height);
+        u32 yOffset = drawH > 384 ? (drawH - 384) / 2 : 0;
+        [encoder copyFromTexture:bottomTex
+                    sourceSlice:0
+                    sourceLevel:0
+                   sourceOrigin:MTLOriginMake(0, 0, 0)
+                     sourceSize:MTLSizeMake(256, 192, 1)
+                      toTexture:drawable.texture
+               destinationSlice:0
+               destinationLevel:0
+              destinationOrigin:MTLOriginMake(0, yOffset + 192, 0)];
+
+        [encoder endEncoding];
+        [blit presentDrawable:drawable];
+        [blit commit];
+    }
+    return true;
+}
+
 void az_update_framebuffer(bool is_portrait) {
     if (!Core::System::GetInstance().IsPoweredOn()) return;
     Core::System::GetInstance().GPU().Renderer().UpdateCurrentFramebufferLayout(is_portrait);
@@ -539,6 +885,36 @@ void az_swap_screens(bool swap, int rotation) {
 // ---------------------------------------------------------------------------
 
 bool az_button_event(int button, bool pressed) {
+    // Also update TWL button state when a DS game is running
+    auto* twl = g_active_system ? g_active_system->GetTWLCore() : nullptr;
+    if (twl && twl->IsRunning()) {
+        u16 current = twl_button_state.load();
+        // Map 3DS button ID to NDS button
+        u16 nds_mask = 0;
+        switch (button) {
+        case 700: nds_mask = TWL::ButtonA; break;
+        case 701: nds_mask = TWL::ButtonB; break;
+        case 702: nds_mask = TWL::ButtonX; break;
+        case 703: nds_mask = TWL::ButtonY; break;
+        case 704: nds_mask = TWL::ButtonStart; break;
+        case 705: nds_mask = TWL::ButtonSelect; break;
+        case 707: nds_mask = TWL::ButtonL; break;
+        case 708: nds_mask = TWL::ButtonR; break;
+        case 709: nds_mask = TWL::ButtonUp; break;
+        case 710: nds_mask = TWL::ButtonDown; break;
+        case 711: nds_mask = TWL::ButtonLeft; break;
+        case 712: nds_mask = TWL::ButtonRight; break;
+        default: break;
+        }
+        if (nds_mask) {
+            if (pressed)
+                current |= nds_mask;
+            else
+                current &= ~nds_mask;
+            twl_button_state.store(current);
+        }
+    }
+
     if (!InputManager::ButtonHandler()) return false;
     return pressed ? InputManager::ButtonHandler()->PressKey(button)
                   : InputManager::ButtonHandler()->ReleaseKey(button);

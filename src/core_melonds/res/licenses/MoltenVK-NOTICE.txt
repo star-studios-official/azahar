@@ -1,0 +1,12 @@
+MoltenVK binary modification notice
+-----------------------------------
+
+melonDS distributes MoltenVK under the Apache License, Version 2.0. The full
+license text is included in MoltenVK-LICENSE.txt.
+
+When packaging melonDS.app, the Mach-O install name (LC_ID_DYLIB) of the
+bundled libMoltenVK.dylib is changed to @rpath/libMoltenVK.dylib and its code
+signature is replaced with an ad-hoc signature. No MoltenVK source code is
+changed by the melonDS packaging process.
+
+MoltenVK project: https://github.com/KhronosGroup/MoltenVK
