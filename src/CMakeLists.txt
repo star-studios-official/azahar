@@ -198,8 +198,10 @@ cmake_policy(SET CMP0079 NEW)
 
 # Configure melonDS for embedded use (no JIT on iOS, Vulkan via MoltenVK)
 set(ENABLE_JIT OFF CACHE BOOL "Disable melonDS JIT (not available on iOS)" FORCE)
-set(ENABLE_OGLRENDERER OFF CACHE BOOL "Disable melonDS OpenGL (use Vulkan via MoltenVK)" FORCE)
-set(ENABLE_VKRENDERER ON CACHE BOOL "Enable melonDS Vulkan renderer" FORCE)
+set(ENABLE_OGLRENDERER OFF CACHE BOOL "Disable melonDS OpenGL" FORCE)
+# Disable melonDS's own Vulkan renderer — use Azahar's Vulkan pipeline instead.
+# melonDS's glslang includes are incompatible with Azahar's bundled glslang.
+set(ENABLE_VKRENDERER OFF CACHE BOOL "Disable melonDS Vulkan renderer (use Azahar's)" FORCE)
 set(ENABLE_GDBSTUB OFF CACHE BOOL "Disable melonDS GDB stub" FORCE)
 set(BUILD_TESTING OFF CACHE BOOL "Disable melonDS tests" FORCE)
 

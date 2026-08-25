@@ -896,9 +896,18 @@ void az_present_frame(void) {
     // the TextureMailbox; nothing to do from the frontend display link.
 }
 
-/// Blit melonDS framebuffers (top + bottom, 256x192 each, RGBA8888) to the Metal layer.
+/// Pre-allocated Metal textures for melonDS frame presentation.
+/// Avoids creating new textures every frame.
+static id<MTLTexture> s_twlTopTex = nil;
+static id<MTLTexture> s_twlBottomTex = nil;
+static id<MTLDevice> s_twlDevice = nil;
+static id<MTLCommandQueue> s_twlQueue = nil;
+static constexpr u32 kDSWidth = 256;
+static constexpr u32 kDSHeight = 192;
+
+/// Blit melonDS framebuffers (top + bottom, 256x192 each, XRGB8888) to the Metal layer.
+/// Uses pre-allocated textures and a single staging buffer for efficient presentation.
 /// Called from the MetalView display link when a DS game is running.
-/// Returns true if a frame was blitted.
 bool az_twl_present_frame(void) {
     auto* twl = g_active_system ? g_active_system->GetTWLCore() : nullptr;
     if (!twl || !twl->IsRunning()) return false;
@@ -909,80 +918,95 @@ bool az_twl_present_frame(void) {
         id<MTLDevice> device = layer.device;
         if (!device) return false;
 
-        id<MTLCommandQueue> queue = [device newCommandQueue];
-        if (!queue) return false;
+        // Lazily create command queue
+        if (!s_twlQueue || s_twlDevice != device) {
+            s_twlDevice = device;
+            s_twlQueue = [device newCommandQueue];
+            s_twlTopTex = nil;
+            s_twlBottomTex = nil;
+        }
+        if (!s_twlQueue) return false;
+
+        // Lazily create textures
+        if (!s_twlTopTex) {
+            MTLTextureDescriptor* desc = [MTLTextureDescriptor
+                texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                                             width:kDSWidth
+                                            height:kDSHeight
+                                         mipmapped:NO];
+            desc.usage = MTLTextureUsageShaderRead;
+            desc.storageMode = MTLStorageModeManaged;
+            s_twlTopTex = [device newTextureWithDescriptor:desc];
+            s_twlBottomTex = [device newTextureWithDescriptor:desc];
+        }
 
         // Get the current drawable
         id<CAMetalDrawable> drawable = [layer nextDrawable];
         if (!drawable) return false;
 
-        // Get melonDS screen pointers
+        // Get melonDS screen pointers (XRGB8888: 0x00RRGGBB)
         const u32* top = twl->GetTopScreen();
         const u32* bottom = twl->GetBottomScreen();
         if (!top || !bottom) return false;
 
-        // Create textures from CPU framebuffers (256x192 each)
-        MTLTextureDescriptor* texDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
-                                                                                          width:256
-                                                                                         height:192
-                                                                                      mipmapped:NO];
-        texDesc.usage = MTLTextureUsageShaderRead;
-        texDesc.storageMode = MTLStorageModeManaged;
+        // Convert XRGB8888 → BGRA8888 in-place using a staging buffer
+        // melonDS soft renderer outputs XRGB8888 (0x00RRGGBB)
+        // Metal BGRA8Unorm expects byte order: B G R A
+        static thread_local std::array<u32, kDSWidth * kDSHeight> staging;
 
-        id<MTLTexture> topTex = [device newTextureWithDescriptor:texDesc];
-        id<MTLTexture> bottomTex = [device newTextureWithDescriptor:texDesc];
-
-        // Upload top screen - melonDS outputs RGBA8888, Metal expects BGRA8888
-        // We need to swap R and B channels
-        std::array<u32, 256 * 192> top_swapped, bottom_swapped;
-        for (size_t i = 0; i < 256 * 192; i++) {
+        for (size_t i = 0; i < kDSWidth * kDSHeight; i++) {
             u32 px = top[i];
-            top_swapped[i] = (px & 0xFF00FF00) | ((px & 0xFF) << 16) | ((px >> 16) & 0xFF);
-            px = bottom[i];
-            bottom_swapped[i] = (px & 0xFF00FF00) | ((px & 0xFF) << 16) | ((px >> 16) & 0xFF);
+            staging[i] = (px & 0xFF00FF00) | ((px & 0xFF) << 16) | ((px >> 16) & 0xFF);
         }
+        [s_twlTopTex replaceRegion:MTLRegionMake2D(0, 0, kDSWidth, kDSHeight)
+                      mipmapLevel:0
+                        withBytes:staging.data()
+                      bytesPerRow:kDSWidth * 4];
 
-        [topTex replaceRegion:MTLRegionMake2D(0, 0, 256, 192)
-               mipmapLevel:0
-                 withBytes:top_swapped.data()
-               bytesPerRow:256 * 4];
-        [bottomTex replaceRegion:MTLRegionMake2D(0, 0, 256, 192)
-               mipmapLevel:0
-             withBytes:bottom_swapped.data()
-               bytesPerRow:256 * 4];
+        for (size_t i = 0; i < kDSWidth * kDSHeight; i++) {
+            u32 px = bottom[i];
+            staging[i] = (px & 0xFF00FF00) | ((px & 0xFF) << 16) | ((px >> 16) & 0xFF);
+        }
+        [s_twlBottomTex replaceRegion:MTLRegionMake2D(0, 0, kDSWidth, kDSHeight)
+                          mipmapLevel:0
+                            withBytes:staging.data()
+                          bytesPerRow:kDSWidth * 4];
 
-        // Copy both screens to the drawable texture (stacked vertically)
-        id<MTLBlitCommandEncoder> blit = [queue commandBuffer];
-        id<MTLBlitCommandEncoder> encoder = [blit blitCommandEncoder];
+        // Blit both screens to the drawable (stacked vertically, centered)
+        id<MTLCommandBuffer> cmdBuf = [s_twlQueue commandBuffer];
+        id<MTLBlitCommandEncoder> encoder = [cmdBuf blitCommandEncoder];
 
-        // Top screen at origin
-        [encoder copyFromTexture:topTex
-                    sourceSlice:0
-                    sourceLevel:0
-                   sourceOrigin:MTLOriginMake(0, 0, 0)
-                     sourceSize:MTLSizeMake(256, 192, 1)
-                      toTexture:drawable.texture
-               destinationSlice:0
-               destinationLevel:0
-              destinationOrigin:MTLOriginMake(0, 0, 0)];
-
-        // Bottom screen below top screen
         u32 drawW = static_cast<u32>(layer.drawableSize.width);
         u32 drawH = static_cast<u32>(layer.drawableSize.height);
-        u32 yOffset = drawH > 384 ? (drawH - 384) / 2 : 0;
-        [encoder copyFromTexture:bottomTex
+        u32 totalH = kDSHeight * 2;
+        u32 yOffset = drawH > totalH ? (drawH - totalH) / 2 : 0;
+        u32 xOffset = drawW > kDSWidth ? (drawW - kDSWidth) / 2 : 0;
+
+        // Top screen
+        [encoder copyFromTexture:s_twlTopTex
                     sourceSlice:0
                     sourceLevel:0
                    sourceOrigin:MTLOriginMake(0, 0, 0)
-                     sourceSize:MTLSizeMake(256, 192, 1)
+                     sourceSize:MTLSizeMake(kDSWidth, kDSHeight, 1)
                       toTexture:drawable.texture
                destinationSlice:0
                destinationLevel:0
-              destinationOrigin:MTLOriginMake(0, yOffset + 192, 0)];
+              destinationOrigin:MTLOriginMake(xOffset, yOffset, 0)];
+
+        // Bottom screen below top
+        [encoder copyFromTexture:s_twlBottomTex
+                    sourceSlice:0
+                    sourceLevel:0
+                   sourceOrigin:MTLOriginMake(0, 0, 0)
+                     sourceSize:MTLSizeMake(kDSWidth, kDSHeight, 1)
+                      toTexture:drawable.texture
+               destinationSlice:0
+               destinationLevel:0
+              destinationOrigin:MTLOriginMake(xOffset, yOffset + kDSHeight, 0)];
 
         [encoder endEncoding];
-        [blit presentDrawable:drawable];
-        [blit commit];
+        [cmdBuf presentDrawable:drawable];
+        [cmdBuf commit];
     }
     return true;
 }
