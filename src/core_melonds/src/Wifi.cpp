@@ -828,7 +828,7 @@ void Wifi::SendMPDefaultReply()
     *(u16*)&reply[0xC + 0x16] = IOPORT(W_TXSeqNo) << 4;
     *(u32*)&reply[0xC + 0x18] = 0;
 
-    int txlen = Platform::MP_SendReply(reply, 12+28, USTimestamp, IOPORT(W_AIDLow), NDS.UserData);
+    [[maybe_unused]] int txlen = Platform::MP_SendReply(reply, 12+28, USTimestamp, IOPORT(W_AIDLow), NDS.UserData);
     WIFI_LOG("wifi: sent %d/40 bytes of MP default reply\n", txlen);
 }
 
@@ -938,7 +938,7 @@ void Wifi::SendMPAck(u16 cmdcount, u16 clientfail)
         *(u32*)&ack[0] = PreambleLen(TXSlots[1].Rate);
     }
 
-    int txlen = Platform::MP_SendAck(ack, 12+32, USTimestamp, NDS.UserData);
+    [[maybe_unused]] int txlen = Platform::MP_SendAck(ack, 12+32, USTimestamp, NDS.UserData);
     WIFI_LOG("wifi: sent %d/44 bytes of MP ack, %d %d\n", txlen, ComStatus, RXTime);
 }
 

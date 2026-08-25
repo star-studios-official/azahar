@@ -235,7 +235,32 @@ else()
     set(_MELONDS_TEAKRA_EXISTS FALSE)
 endif()
 
+# melonDS networking: Net + Net_Slirp + PacketDispatcher + libslirp
+# This provides the user-mode TCP/IP stack that DS WFC (Wiimmfi) needs.
+# We build only the subset of melonDS net/ that doesn't require pcap or enet.
+set(MELONDS_NET_DIR "${CMAKE_CURRENT_SOURCE_DIR}/core_melonds/src/net")
+
+# Bundled libslirp (user-mode TCP/IP stack)
+add_subdirectory("${MELONDS_NET_DIR}/libslirp" EXCLUDE_FROM_ALL)
+
+add_library(melonDS_net STATIC
+    "${MELONDS_NET_DIR}/Net.cpp"
+    "${MELONDS_NET_DIR}/PacketDispatcher.cpp"
+    "${MELONDS_NET_DIR}/Net_Slirp.cpp"
+)
+target_include_directories(melonDS_net PUBLIC
+    "${MELONDS_NET_DIR}"
+    "${MELONDS_NET_DIR}/.."
+)
+target_link_libraries(melonDS_net PUBLIC slirp)
+if (APPLE)
+    target_link_libraries(melonDS_net PRIVATE resolv)
+endif()
+
 add_subdirectory(core_melonds/src)
+# Link melonDS networking into the melonDS core library so WifiAP/
+# Net symbols resolve at link time.
+target_link_libraries(core PUBLIC melonDS_net)
 add_subdirectory(core)
 add_subdirectory(video_core)
 add_subdirectory(audio_core)

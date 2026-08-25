@@ -25,6 +25,8 @@
 #include "src/SPI_Firmware.h"
 #include "src/Platform.h"
 #include "src/GBACart.h"
+#include "src/net/Net.h"
+#include "src/net/Net_Slirp.h"
 
 LOG_MODULE(TWL, Log::Class::Loader);
 
@@ -49,6 +51,10 @@ struct PlatformState {
     std::vector<u8> save_data;
     bool save_dirty = false;
     std::shared_mutex save_mutex;
+
+    // Networking (WFC / Wiimmfi)
+    melonDS::Net net;
+    bool net_initialized = false;
 };
 
 static PlatformState g_platform_state;
@@ -411,8 +417,14 @@ int MP_RecvCmdPacket(u8* data, u64* timestamp, u16* aid, void* userdata) { retur
 void MP_Begin(void* userdata) {}
 void MP_End(void* userdata) {}
 
-int Net_SendPacket(u8* data, int len, void* userdata) { return 0; }
-int Net_RecvPacket(u8* data, void* userdata) { return 0; }
+int Net_SendPacket(u8* data, int len, void* userdata) {
+    if (!g_platform_state.net_initialized) return 0;
+    return g_platform_state.net.SendPacket(data, len, 0);
+}
+int Net_RecvPacket(u8* data, void* userdata) {
+    if (!g_platform_state.net_initialized) return 0;
+    return g_platform_state.net.RecvPacket(data, 0);
+}
 
 void Camera_Start(int num, void* userdata) {}
 void Camera_Stop(int num, void* userdata) {}
@@ -543,6 +555,23 @@ bool Core::Initialize(const std::string& nds_rom_path) {
 
     impl->nds->NDSCartSlot.SetCart(std::move(cart));
 
+    // Set up networking (WFC / Wiimmfi)
+    // Register instance 0 for packet dispatching, then create a Net_Slirp
+    // driver which provides a user-mode TCP/IP stack. The DS firmware's
+    // WFC library sends 802.3 Ethernet frames through WifiAP which calls
+    // Platform::Net_SendPacket; we route them through libslirp which handles
+    // DNS, TCP, UDP and NAT on the host network.
+    g_platform_state.net.RegisterInstance(0);
+    {
+        auto send_callback = [](const u8* data, int len) {
+            g_platform_state.net.RXEnqueue(data, len);
+        };
+        auto driver = std::make_unique<melonDS::Net_Slirp>(send_callback);
+        g_platform_state.net.SetDriver(std::move(driver));
+    }
+    g_platform_state.net_initialized = true;
+    LOG_INFO(TWL, "Networking initialized (Net_Slirp / WFC)");
+
     LOG_INFO(TWL, "TWL core initialized successfully");
     initialized = true;
     return true;
@@ -569,6 +598,13 @@ void Core::Stop() {
         emu_thread->join();
     }
     emu_thread.reset();
+
+    // Clean up networking
+    if (g_platform_state.net_initialized) {
+        g_platform_state.net.SetDriver(nullptr);
+        g_platform_state.net.UnregisterInstance(0);
+        g_platform_state.net_initialized = false;
+    }
 }
 
 void Core::RunLoop() {

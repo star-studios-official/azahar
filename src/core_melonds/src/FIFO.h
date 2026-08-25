@@ -97,7 +97,7 @@ public:
     bool CanFit(u32 num) const { return ((NumOccupied + num) <= NumEntries); }
 
 private:
-    T Entries[NumEntries] = {0};
+    T Entries[NumEntries] = {};
     u32 NumOccupied = 0;
     u32 ReadPos = 0, WritePos = 0;
 };

@@ -34,6 +34,10 @@ struct MelonDSSettingsView: View {
     @AppStorage("melonds_audio_interpolation") private var audioInterpolation = 1 // 0=none,1=linear,2=cosine,3=cubic,4=gaussian
     @AppStorage("melonds_output_sample_rate") private var outputSampleRate = 48000
 
+    // WiFi / Online Play
+    @AppStorage("melonds_wifi_enabled") private var wifiEnabled = true
+    @AppStorage("melonds_wfc_dns_redirect") private var wfcDNSRedirect = true
+
     // Screen
     @AppStorage("melonds_screen_layout") private var screenLayout = 0
     @AppStorage("melonds_screen_swap") private var screenSwap = false
@@ -231,6 +235,49 @@ struct MelonDSSettingsView: View {
                     Text("44100 Hz").tag(44100)
                     Text("48000 Hz").tag(48000)
                 }
+            }
+
+            // MARK: - WiFi / Online Play
+            section("WiFi / Online Play") {
+                Toggle("Enable WiFi Networking", isOn: $wifiEnabled)
+                    .tint(.green)
+
+                if wifiEnabled {
+                    Toggle("Wiimmfi DNS Redirect", isOn: $wfcDNSRedirect)
+                        .tint(.green)
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        if wfcDNSRedirect {
+                            HStack {
+                                Image(systemName: "globe")
+                                    .foregroundStyle(.green)
+                                Text("DNS queries for Nintendo WFC games are resolved via the host network. For Wiimmfi, DS game WFC settings should point to the virtual DNS.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .foregroundStyle(.orange)
+                                Text("DNS redirect is off. Online play with Wiimmfi requires DNS redirect.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                } else {
+                    HStack {
+                        Image(systemName: "wifi.slash")
+                            .foregroundStyle(.secondary)
+                        Text("WiFi is disabled. DS games that require Nintendo WFC online play will not work.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Text("melonDS provides a user-mode TCP/IP stack (libslirp) for DS online play. DS games that use Nintendo WFC can connect to the internet when enabled. Requires an internet connection on the host.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             // MARK: - Screen Layout

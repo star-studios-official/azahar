@@ -147,9 +147,14 @@ private:
     std::function<void()> stop_callback;
     std::function<void(const s16*, std::size_t, u32)> audio_callback;
 
+    /// Enable/disable WFC networking (Wiimmfi/online play)
+    void SetNetworkingEnabled(bool enabled) { networking_enabled = enabled; }
+    bool IsNetworkingEnabled() const { return networking_enabled; }
+
     // melonDS state (opaque - forward declared in cpp)
     struct Impl;
     std::unique_ptr<Impl> impl;
+    bool networking_enabled = true;
 };
 
 } // namespace TWL
