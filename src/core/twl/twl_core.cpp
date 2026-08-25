@@ -287,7 +287,7 @@ void WriteFirmware(const Firmware& firmware, u32 writeoffset, u32 writelen, void
 
     FILE* fp = fopen(g_platform_state.firmware_path.c_str(), "wb");
     if (fp) {
-        fwrite(firmware.GetData(), 1, firmware.GetDataLen(), fp);
+        fwrite(firmware.Buffer(), 1, firmware.Length(), fp);
         fclose(fp);
     }
 }
@@ -438,7 +438,7 @@ void Mic_Stop(void* userdata) {}
 int Mic_ReadInput(s16* data, int maxlength, void* userdata) { return 0; }
 
 struct AACDecoder;
-void AAC_Init() {}
+AACDecoder* AAC_Init() { return nullptr; }
 AACDecoder* AAC_Create() { return nullptr; }
 void AAC_Free(AACDecoder* dec) {}
 void AAC_DeInit(AACDecoder* dec) {}
@@ -487,7 +487,7 @@ bool Core::Initialize(const std::string& nds_rom_path) {
     impl->rom_path = nds_rom_path;
 
     // Set up platform state
-    g_platform_state.base_path = FileUtil::GetUserPath(FileUtil::UserPath::AppDir);
+    g_platform_state.base_path = FileUtil::GetUserPath(FileUtil::UserPath::UserDir);
     g_platform_state.nds_save_path = nds_rom_path + ".save";
     g_platform_state.stop_callback = [this]() {
         stop_requested = true;
@@ -679,22 +679,16 @@ std::string Core::GetROMTitle() const {
     if (!initialized || !impl->nds || !impl->nds->NDSCartSlot.CartInserted())
         return {};
 
-    const auto* header = impl->nds->NDSCartSlot.GetCart()->GetHeader();
-    if (!header)
-        return {};
-
-    return header->GetGameTitle();
+    const auto& header = impl->nds->NDSCartSlot.GetCart()->GetHeader();
+    return std::string(header.GameTitle, strnlen(header.GameTitle, sizeof(header.GameTitle)));
 }
 
 std::string Core::GetGameCode() const {
     if (!initialized || !impl->nds || !impl->nds->NDSCartSlot.CartInserted())
         return {};
 
-    const auto* header = impl->nds->NDSCartSlot.GetCart()->GetHeader();
-    if (!header)
-        return {};
-
-    return header->GetGameCode();
+    const auto& header = impl->nds->NDSCartSlot.GetCart()->GetHeader();
+    return std::string(header.GameCode, strnlen(header.GameCode, sizeof(header.GameCode)));
 }
 
 u16 Core::Map3DSButtonsToNDS(u32 hbl_button_state, s16 circle_pad_x, s16 circle_pad_y) {
@@ -849,7 +843,7 @@ bool Core::InitializeDSFirmware() {
     LOG_INFO(TWL, "Initializing DS firmware boot (NDS mode)");
 
     // Set up platform state
-    g_platform_state.base_path = FileUtil::GetUserPath(FileUtil::UserPath::AppDir);
+    g_platform_state.base_path = FileUtil::GetUserPath(FileUtil::UserPath::UserDir);
     g_platform_state.stop_callback = [this]() {
         stop_requested = true;
     };
@@ -921,7 +915,7 @@ bool Core::InitializeDSiNAND(const std::string& nand_path) {
     }
 
     // Set up platform state
-    g_platform_state.base_path = FileUtil::GetUserPath(FileUtil::UserPath::AppDir);
+    g_platform_state.base_path = FileUtil::GetUserPath(FileUtil::UserPath::UserDir);
     g_platform_state.stop_callback = [this]() {
         stop_requested = true;
     };
@@ -940,7 +934,7 @@ bool Core::InitializeDSiNAND(const std::string& nand_path) {
     char footer_check[16];
     melonDS::Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
 
-    DSi_NAND::DSiKey es_keyY{};
+    melonDS::DSi_NAND::DSiKey es_keyY{};
     if (memcmp(footer_check, "DSi eMMC CID/CPU", 16) == 0) {
         melonDS::Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
         LOG_INFO(TWL, "Read eMMC CID from nocash footer");
@@ -960,7 +954,7 @@ bool Core::InitializeDSiNAND(const std::string& nand_path) {
     }
 
     // Create NAND image
-    DSi_NAND::NANDImage nand_img(nand_file, es_keyY);
+    melonDS::DSi_NAND::NANDImage nand_img(nand_file, es_keyY);
     if (!nand_img) {
         melonDS::Platform::CloseFile(nand_file);
         error_message = "Failed to initialize DSi NAND crypto";
@@ -1045,7 +1039,7 @@ std::vector<std::string> Core::GetDSiNANDTitles(const std::string& nand_path) {
     char footer_check[16];
     melonDS::Platform::FileRead(footer_check, 1, sizeof(footer_check), nand_file);
 
-    DSi_NAND::DSiKey es_keyY{};
+    melonDS::DSi_NAND::DSiKey es_keyY{};
     if (memcmp(footer_check, "DSi eMMC CID/CPU", 16) == 0) {
         melonDS::Platform::FileRead(es_keyY.data(), 1, sizeof(es_keyY), nand_file);
     } else {
@@ -1059,13 +1053,13 @@ std::vector<std::string> Core::GetDSiNANDTitles(const std::string& nand_path) {
         }
     }
 
-    DSi_NAND::NANDImage nand_img(nand_file, es_keyY);
+    melonDS::DSi_NAND::NANDImage nand_img(nand_file, es_keyY);
     if (!nand_img) {
         melonDS::Platform::CloseFile(nand_file);
         return titles;
     }
 
-    DSi_NAND::NANDMount mount(nand_img);
+    melonDS::DSi_NAND::NANDMount mount(nand_img);
     if (!mount) {
         return titles;
     }
@@ -1081,15 +1075,15 @@ std::vector<std::string> Core::GetDSiNANDTitles(const std::string& nand_path) {
         u32 version = 0;
         mount.GetTitleInfo(0x0003, titleid, version, &header, &banner);
 
-        // Extract game title from banner
-        char16_t title_buf[128]{};
-        memcpy(title_buf, banner.TotalROMByteLength ? banner.GameName : header.GameTitle, sizeof(header.GameTitle));
-
+        // Extract game title from banner (English preferred, fallback to header)
         std::string title_str;
-        for (int i = 0; i < 128 && title_buf[i]; i++) {
-            char c = static_cast<char>(title_buf[i]);
-            if (c >= 0x20) title_str += c;
-        }
+        if (banner.EnglishTitle[0]) {
+            for (int i = 0; i < 128 && banner.EnglishTitle[i]; i++) {
+                char c = static_cast<char>(banner.EnglishTitle[i]);
+                if (c >= 0x20) title_str += c;
+            }
+        } else {
+            title_str = std::string(header.GameTitle, strnlen(header.GameTitle, sizeof(header.GameTitle)));
 
         if (!title_str.empty()) {
             char id_buf[16]{};
