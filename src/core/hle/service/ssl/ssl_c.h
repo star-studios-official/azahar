@@ -46,7 +46,7 @@ struct SSLContextData {
 };
 
 struct SSLConnectionData {
-    SSL* ssl = nullptr;
+    ::SSL* ssl = nullptr;
     u32 context_id = 0;
     int sock_fd = -1;
     bool connected = false;
@@ -70,7 +70,7 @@ public:
     ~SSL_C();
 
     // For use by HTTP service to get the OpenSSL context for a connection
-    SSL* GetSSLForConnection(u32 conn_id) const;
+    ::SSL* GetSSLForConnection(u32 conn_id) const;
 
 private:
     void Initialize(Kernel::HLERequestContext& ctx);

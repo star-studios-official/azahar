@@ -118,7 +118,7 @@ void SSL_C::LoadDefaultCertificates() {
     // which contains all the same CAs. This is functionally equivalent.
 
     root_cert_chains[chain_id] = default_chain;
-    LOG_INFO(Service_SSL, "Created default root cert chain {}", chain_id);
+    LOG_INFO(Network, "Created default root cert chain {}", chain_id);
 }
 
 void SSL_C::Initialize(Kernel::HLERequestContext& ctx) {
@@ -137,7 +137,7 @@ void SSL_C::Initialize(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
-    LOG_INFO(Service_SSL, "SSL initialized");
+    LOG_INFO(Network, "SSL initialized");
 }
 
 void SSL_C::CreateContext(Kernel::HLERequestContext& ctx) {
@@ -152,7 +152,7 @@ void SSL_C::CreateContext(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
     rb.Push(ResultSuccess);
     rb.Push(context_id);
-    LOG_INFO(Service_SSL, "Created SSL context {}", context_id);
+    LOG_INFO(Network, "Created SSL context {}", context_id);
 }
 
 void SSL_C::CreateRootCertChain(Kernel::HLERequestContext& ctx) {
@@ -166,7 +166,7 @@ void SSL_C::CreateRootCertChain(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
     rb.Push(ResultSuccess);
     rb.Push(chain_id);
-    LOG_INFO(Service_SSL, "Created root cert chain {}", chain_id);
+    LOG_INFO(Network, "Created root cert chain {}", chain_id);
 }
 
 void SSL_C::DestroyRootCertChain(Kernel::HLERequestContext& ctx) {
@@ -183,7 +183,7 @@ void SSL_C::DestroyRootCertChain(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
-    LOG_INFO(Service_SSL, "Destroyed root cert chain {}", chain_id);
+    LOG_INFO(Network, "Destroyed root cert chain {}", chain_id);
 }
 
 void SSL_C::AddTrustedRootCA(Kernel::HLERequestContext& ctx) {
@@ -199,9 +199,9 @@ void SSL_C::AddTrustedRootCA(Kernel::HLERequestContext& ctx) {
     bool success = AddCertToChain(chain_id, cert_data.data(), cert_size);
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 2);
-    rb.Push(success ? ResultSuccess : ResultInvalidPointer);
+    rb.Push(success ? ResultSuccess : Kernel::ResultInvalidPointer);
     rb.PushMappedBuffer(cert_ptr);
-    LOG_INFO(Service_SSL, "Added root CA to chain {} (size={})", chain_id, cert_size);
+    LOG_INFO(Network, "Added root CA to chain {} (size={})", chain_id, cert_size);
 }
 
 bool SSL_C::AddCertToChain(u32 chain_id, const u8* cert_data, u32 cert_size) {
@@ -227,7 +227,7 @@ bool SSL_C::AddCertToChain(u32 chain_id, const u8* cert_data, u32 cert_size) {
     }
 
     if (!cert) {
-        LOG_ERROR(Service_SSL, "Failed to parse certificate");
+        LOG_ERROR(Network, "Failed to parse certificate");
         return false;
     }
 
@@ -254,7 +254,7 @@ void SSL_C::RootCertChainAddDefaultCert(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
-    LOG_INFO(Service_SSL, "Added default cert {} to chain {}", cert_id, chain_id);
+    LOG_INFO(Network, "Added default cert {} to chain {}", cert_id, chain_id);
 }
 
 void SSL_C::RootCertChainRemoveCert(Kernel::HLERequestContext& ctx) {
@@ -264,7 +264,7 @@ void SSL_C::RootCertChainRemoveCert(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
-    LOG_INFO(Service_SSL, "Removed cert {} from chain {}", cert_id, chain_id);
+    LOG_INFO(Network, "Removed cert {} from chain {}", cert_id, chain_id);
 }
 
 void SSL_C::OpenClientCertContext(Kernel::HLERequestContext& ctx) {
@@ -293,7 +293,7 @@ void SSL_C::OpenClientCertContext(Kernel::HLERequestContext& ctx) {
         std::vector<u8> key_data(key_size);
         key_ptr.Read(key_data.data(), 0, key_size);
         const u8* p = key_data.data();
-        client_cert.key = d2i_PrivateKey(nullptr, &p, static_cast<long>(key_size));
+        client_cert.key = d2i_PrivateKey(0, nullptr, &p, static_cast<long>(key_size));
     }
 
     client_certs[client_cert_id] = client_cert;
@@ -303,7 +303,7 @@ void SSL_C::OpenClientCertContext(Kernel::HLERequestContext& ctx) {
     rb.Push(client_cert_id);
     rb.PushMappedBuffer(cert_ptr);
     rb.PushMappedBuffer(key_ptr);
-    LOG_INFO(Service_SSL, "Opened client cert context {}", client_cert_id);
+    LOG_INFO(Network, "Opened client cert context {}", client_cert_id);
 }
 
 void SSL_C::OpenDefaultClientCertContext(Kernel::HLERequestContext& ctx) {
@@ -321,7 +321,7 @@ void SSL_C::OpenDefaultClientCertContext(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
     rb.Push(ResultSuccess);
     rb.Push(client_cert_id);
-    LOG_INFO(Service_SSL, "Opened default client cert context {}", client_cert_id);
+    LOG_INFO(Network, "Opened default client cert context {}", client_cert_id);
 }
 
 void SSL_C::CloseClientCertContext(Kernel::HLERequestContext& ctx) {
@@ -347,7 +347,7 @@ void SSL_C::GenerateRandomData(Kernel::HLERequestContext& ctx) {
     auto buffer = rp.PopMappedBuffer();
 
     std::vector<u8> out_data(size);
-    SSL::GenerateRandomData(out_data);
+    RAND_bytes(out_data.data(), static_cast<int>(size));
     buffer.Write(out_data.data(), 0, size);
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 2);
@@ -400,7 +400,7 @@ void SSL_C::InitializeConnectionSession(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
     rb.Push(ResultSuccess);
     rb.Push(assigned_id);
-    LOG_INFO(Service_SSL, "Initialized connection session {} for context {}", assigned_id,
+    LOG_INFO(Network, "Initialized connection session {} for context {}", assigned_id,
              context_id);
 }
 
@@ -418,7 +418,7 @@ void SSL_C::StartConnection(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
-    LOG_INFO(Service_SSL, "Started connection {}", conn_id);
+    LOG_INFO(Network, "Started connection {}", conn_id);
 }
 
 void SSL_C::StartConnectionGetOut(Kernel::HLERequestContext& ctx) {
@@ -525,7 +525,7 @@ void SSL_C::ContextSetRootCertChain(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
-    LOG_INFO(Service_SSL, "Set root cert chain {} on context {}", chain_id, context_id);
+    LOG_INFO(Network, "Set root cert chain {} on context {}", chain_id, context_id);
 }
 
 void SSL_C::ContextSetClientCert(Kernel::HLERequestContext& ctx) {
@@ -602,7 +602,7 @@ void SSL_C::DestroyContext(Kernel::HLERequestContext& ctx) {
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
-    LOG_INFO(Service_SSL, "Destroyed SSL context {}", context_id);
+    LOG_INFO(Network, "Destroyed SSL context {}", context_id);
 }
 
 void SSL_C::ContextInitSharedmem(Kernel::HLERequestContext& ctx) {
@@ -619,11 +619,11 @@ void SSL_C::ContextInitSharedmem(Kernel::HLERequestContext& ctx) {
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 2);
     rb.Push(ResultSuccess);
     rb.PushMappedBuffer(sharedmem_ptr);
-    LOG_INFO(Service_SSL, "Initialized sharedmem for context {} (size={})", context_id,
+    LOG_INFO(Network, "Initialized sharedmem for context {} (size={})", context_id,
              sharedmem_size);
 }
 
-SSL* SSL_C::GetSSLForConnection(u32 conn_id) const {
+::SSL* SSL_C::GetSSLForConnection(u32 conn_id) const {
     auto it = connections.find(conn_id);
     if (it != connections.end()) {
         return it->second.ssl;
