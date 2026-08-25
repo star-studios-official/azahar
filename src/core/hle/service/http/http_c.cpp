@@ -402,8 +402,8 @@ void Context::MakeRequestSSL(httplib::Request& request, const Common::URLInfo& u
             X509_STORE* store = X509_STORE_new();
             if (store) {
                 for (const auto& der_cert : root_chain->certificates) {
-                    const unsigned char* p = der_cert.data();
-                    X509* ca_cert = d2i_X509(nullptr, &p, static_cast<long>(der_cert.size()));
+                    const unsigned char* p = der_cert.certificate.data();
+                    X509* ca_cert = d2i_X509(nullptr, &p, static_cast<long>(der_cert.certificate.size()));
                     if (ca_cert) {
                         X509_STORE_add_cert(store, ca_cert);
                         X509_free(ca_cert);
@@ -1819,7 +1819,7 @@ void HTTP_C::SelectRootCertChain(Kernel::HLERequestContext& ctx) {
         auto shared_chain = std::make_shared<RootCertChain>();
         shared_chain->handle = root_cert_chain_handle;
         for (const auto& der_cert : chain_it->second.certificates) {
-            Context::RootCertChain::RootCACert ca_cert;
+            RootCertChain::RootCACert ca_cert;
             ca_cert.handle = static_cast<u32>(shared_chain->certificates.size());
             ca_cert.session_id = 0;
             ca_cert.certificate = der_cert;
