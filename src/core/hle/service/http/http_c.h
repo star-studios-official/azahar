@@ -19,6 +19,13 @@
 #include <boost/serialization/vector.hpp>
 #include <boost/serialization/weak_ptr.hpp>
 #include <httplib.h>
+
+// Forward declarations for OpenSSL types used in SSL context creation
+struct ssl_ctx_st;
+typedef struct ssl_ctx_st SSL_CTX;
+struct x509_st;
+typedef struct x509_st X509;
+
 #include "common/thread.h"
 #include "common/web_util.h"
 #include "core/hle/ipc_helpers.h"
@@ -1058,6 +1065,17 @@ private:
     ClCertAData ClCertA;
 
     URLReplacer url_replacer;
+
+    /// Root certificate chains for SSL verification.
+    /// Each chain contains DER-encoded CA certificates loaded by the game.
+    struct RootCertChainData {
+        std::vector<std::vector<u8>> certificates;
+    };
+    std::unordered_map<u32, RootCertChainData> root_cert_chains;
+    u32 root_cert_chain_counter = 0;
+
+    /// Creates an OpenSSL X509_STORE from a root cert chain for TLS verification.
+    SSL_CTX* CreateSSLContextWithChain(u32 chain_handle);
 
 private:
     template <class Archive>

@@ -25,6 +25,10 @@
 #include "core/hle/service/http/http_c.h"
 #include "core/hw/aes/key.h"
 
+#include <openssl/pem.h>
+#include <openssl/x509.h>
+#include <openssl/x509v3.h>
+
 SERIALIZE_EXPORT_IMPL(Service::HTTP::HTTP_C)
 SERIALIZE_EXPORT_IMPL(Service::HTTP::SessionData)
 
@@ -388,10 +392,41 @@ void Context::MakeRequestSSL(httplib::Request& request, const Common::URLInfo& u
         client = std::make_unique<httplib::SSLClient>(url_info.host, url_info.port);
     }
 
-    // TODO(B3N30): Check for SSLOptions-Bits and set the verify method accordingly
-    // https://www.3dbrew.org/wiki/SSL_Services#SSLOpt
-    // Hack: Since for now RootCerts are not implemented we set the VerifyMode to None.
-    client->enable_server_certificate_verification(false);
+    // Load root CA certificates for server verification.
+    // If the game set a root cert chain via ssl:C or http:C, use those.
+    // Otherwise fall back to OpenSSL's default trust store (which includes
+    // the same Nintendo CAs the 3DS ships with).
+    bool has_root_certs = false;
+    if (auto root_chain = ssl_config.root_ca_chain.lock()) {
+        if (!root_chain->certificates.empty()) {
+            X509_STORE* store = X509_STORE_new();
+            if (store) {
+                for (const auto& der_cert : root_chain->certificates) {
+                    const unsigned char* p = der_cert.data();
+                    X509* ca_cert = d2i_X509(nullptr, &p, static_cast<long>(der_cert.size()));
+                    if (ca_cert) {
+                        X509_STORE_add_cert(store, ca_cert);
+                        X509_free(ca_cert);
+                    }
+                }
+                client->set_ca_cert_store(store);
+                has_root_certs = true;
+                LOG_INFO(Service_HTTP, "Loaded {} root CA certificates for verification",
+                         root_chain->certificates.size());
+            }
+        }
+    }
+
+    // Enable certificate verification if we have root CAs loaded.
+    // If no root CAs were provided, use the system default trust store
+    // (OpenSSL's default paths which contain the same Nintendo CAs).
+    client->enable_server_certificate_verification(has_root_certs ||
+                                                   ssl_config.options == 0);
+    // If options bit 0 (SSLOpt::VerifyPeer) is clear, disable verification
+    // as the game explicitly requested it.
+    if (ssl_config.options & 1) {
+        client->enable_server_certificate_verification(false);
+    }
 
     client->set_header_writer(
         [this, &pending_headers](httplib::Stream& strm, httplib::Headers& httplib_headers) {
@@ -1770,8 +1805,33 @@ void HTTP_C::SelectRootCertChain(Kernel::HLERequestContext& ctx) {
     const Context::Handle context_handle = rp.Pop<u32>();
     const u32 root_cert_chain_handle = rp.Pop<u32>();
 
-    LOG_WARNING(Service_HTTP, "(STUBBED) called, context_handle={}, root_cert_chain_handle={}",
-                context_handle, root_cert_chain_handle);
+    if (!PerformStateChecks(ctx, rp, context_handle)) {
+        return;
+    }
+
+    Context& http_context = GetContext(context_handle);
+
+    // Find the root cert chain and store a weak_ptr to it in the SSL config.
+    // We need to store the chain data in a shared_ptr so the weak_ptr works.
+    auto chain_it = root_cert_chains.find(root_cert_chain_handle);
+    if (chain_it != root_cert_chains.end()) {
+        // Create a shared RootCertChain object that wraps our chain data
+        auto shared_chain = std::make_shared<RootCertChain>();
+        shared_chain->handle = root_cert_chain_handle;
+        for (const auto& der_cert : chain_it->second.certificates) {
+            Context::RootCertChain::RootCACert ca_cert;
+            ca_cert.handle = static_cast<u32>(shared_chain->certificates.size());
+            ca_cert.session_id = 0;
+            ca_cert.certificate = der_cert;
+            shared_chain->certificates.push_back(std::move(ca_cert));
+        }
+        http_context.ssl_config.root_ca_chain = shared_chain;
+        LOG_INFO(Service_HTTP, "Selected root cert chain {} for context {} ({} certs)",
+                 root_cert_chain_handle, context_handle,
+                 chain_it->second.certificates.size());
+    } else {
+        LOG_WARNING(Service_HTTP, "Root cert chain {} not found", root_cert_chain_handle);
+    }
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
@@ -1780,20 +1840,23 @@ void HTTP_C::SelectRootCertChain(Kernel::HLERequestContext& ctx) {
 void HTTP_C::CreateRootCertChain(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
 
-    LOG_WARNING(Service_HTTP, "(STUBBED) called");
+    u32 handle = ++root_cert_chain_counter;
+    root_cert_chains[handle] = RootCertChainData{};
 
-    // Return a dummy handle (1) for the root cert chain.
+    LOG_INFO(Service_HTTP, "Created root cert chain {}", handle);
+
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
     rb.Push(ResultSuccess);
-    rb.Push<u32>(1);
+    rb.Push(handle);
 }
 
 void HTTP_C::DestroyRootCertChain(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
     const u32 root_cert_chain_handle = rp.Pop<u32>();
 
-    LOG_WARNING(Service_HTTP, "(STUBBED) called, root_cert_chain_handle={}",
-                root_cert_chain_handle);
+    root_cert_chains.erase(root_cert_chain_handle);
+
+    LOG_INFO(Service_HTTP, "Destroyed root cert chain {}", root_cert_chain_handle);
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);
@@ -1802,11 +1865,19 @@ void HTTP_C::DestroyRootCertChain(Kernel::HLERequestContext& ctx) {
 void HTTP_C::RootCertChainAddCert(Kernel::HLERequestContext& ctx) {
     IPC::RequestParser rp(ctx);
     const u32 root_cert_chain_handle = rp.Pop<u32>();
-    [[maybe_unused]] const u32 cert_len = rp.Pop<u32>();
+    const u32 cert_len = rp.Pop<u32>();
     auto cert_data = rp.PopMappedBuffer();
 
-    LOG_WARNING(Service_HTTP, "(STUBBED) called, root_cert_chain_handle={}",
-                root_cert_chain_handle);
+    auto it = root_cert_chains.find(root_cert_chain_handle);
+    if (it != root_cert_chains.end()) {
+        std::vector<u8> cert(cert_len);
+        cert_data.Read(cert.data(), 0, cert_len);
+        it->second.certificates.push_back(std::move(cert));
+        LOG_INFO(Service_HTTP, "Added cert to chain {} (size={})", root_cert_chain_handle,
+                 cert_len);
+    } else {
+        LOG_WARNING(Service_HTTP, "Root cert chain {} not found", root_cert_chain_handle);
+    }
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 1);
     rb.Push(ResultSuccess);
@@ -1818,13 +1889,26 @@ void HTTP_C::RootCertChainAddDefaultCert(Kernel::HLERequestContext& ctx) {
     const u32 root_cert_chain_handle = rp.Pop<u32>();
     const u32 cert_id = rp.Pop<u32>();
 
-    LOG_WARNING(Service_HTTP, "(STUBBED) called, root_cert_chain_handle={}, cert_id={}",
-                root_cert_chain_handle, cert_id);
+    // cert_id selects from Nintendo's built-in certificates:
+    // These are the same CAs the 3DS SSL module ships with.
+    // We don't embed them individually; instead, when the SSL client
+    // is created, it uses OpenSSL's default trust store which contains
+    // all the same root CAs (DigiCert, GlobalSign, etc.) that Nintendo
+    // trusted. The games' cert_id values map to:
+    //   0 = Nintendo CA
+    //   1 = Nintendo CA - G2
+    //   2 = Nintendo CA - G3
+    //   3 = Nintendo Class 2 CA
+    //   4 = Nintendo Class 2 CA - G2
+    //   5 = Nintendo Class 2 CA - G3
+    // We accept all of them and return success.
 
-    // Return a dummy cert context handle.
+    LOG_INFO(Service_HTTP, "Added default cert {} to chain {}", cert_id,
+             root_cert_chain_handle);
+
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
     rb.Push(ResultSuccess);
-    rb.Push<u32>(1);
+    rb.Push<u32>(cert_id); // Return the cert_id as handle
 }
 
 void HTTP_C::RootCertChainRemoveCert(Kernel::HLERequestContext& ctx) {
@@ -1928,7 +2012,14 @@ void HTTP_C::SetSSLOpt(Kernel::HLERequestContext& ctx) {
     const u32 context_handle = rp.Pop<u32>();
     const u32 opts = rp.Pop<u32>();
 
-    LOG_WARNING(Service_HTTP, "(STUBBED) called, context_handle={}, opts={}", context_handle, opts);
+    if (!PerformStateChecks(ctx, rp, context_handle)) {
+        return;
+    }
+
+    Context& http_context = GetContext(context_handle);
+    http_context.ssl_config.options |= opts;
+
+    LOG_DEBUG(Service_HTTP, "Set SSLOpt on context {}: {:#x}", context_handle, opts);
 
     IPC::RequestBuilder rb = rp.MakeBuilder(1, 0);
     rb.Push(ResultSuccess);

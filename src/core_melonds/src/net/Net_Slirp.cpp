@@ -84,7 +84,7 @@ ssize_t Net_Slirp::SlirpCbSendPacket(const void* buf, size_t len, void* opaque) 
     Net_Slirp& self = *static_cast<Net_Slirp*>(opaque);
     if (self.Callback)
     {
-        self.Callback((const u8*)buf, len);
+        self.Callback((const u8*)buf, static_cast<int>(len));
     }
 
     return len;
@@ -240,7 +240,6 @@ void Net_Slirp::HandleDNSFrame(u8* data, int len) noexcept
     *(u16*)out = htons(0x0800); out += 2;
 
     // IP
-    u8* resp_ipheader = out;
     *out++ = 0x45;
     *out++ = 0x00;
     *(u16*)out = 0; out += 2; // total length
@@ -254,14 +253,10 @@ void Net_Slirp::HandleDNSFrame(u8* data, int len) noexcept
     *(u32*)out = htonl(srcip); out += 4; // destination IP
 
     // UDP
-    u8* resp_udpheader = out;
     *(u16*)out = htons(53); out += 2; // source port
     *(u16*)out = htons(srcport); out += 2; // destination port
     *(u16*)out = 0; out += 2; // length
-    *(u16*)out = 0; out += 2; // checksum
-
-    // DNS
-    u8* resp_body = out;
+    *(u16*)out = 0; out += 2; // checksum    // DNS
     *(u16*)out = htons(id); out += 2; // ID
     *(u16*)out = htons(0x8000); out += 2; // flags
     *(u16*)out = htons(numquestions); out += 2; // num questions
@@ -317,8 +312,7 @@ void Net_Slirp::HandleDNSFrame(u8* data, int len) noexcept
 
 		// get answer
 		struct addrinfo dns_hint;
-		struct addrinfo* dns_res;
-		u32 addr_res;
+		struct addrinfo* dns_res;                u32 addr_res = 0;
 
 		memset(&dns_hint, 0, sizeof(dns_hint));
 		dns_hint.ai_family = AF_INET; // TODO: other address types (INET6, etc)
