@@ -282,7 +282,7 @@ static int vmstate_n_elems(char *opaque, const VMStateField *field)
 
 static int vmstate_size(char *opaque, const VMStateField *field)
 {
-    int size = field->size;
+    int size = (int)field->size;
 
     if (field->flags & VMS_VBUFFER) {
         size = *(int32_t *)(opaque + field->size_offset);
