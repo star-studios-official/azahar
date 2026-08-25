@@ -189,6 +189,7 @@ int soread(struct socket *so)
      * soread wouldn't have been called if there weren't
      */
     buf_len = sopreprbuf(so, iov, &n);
+    (void)buf_len;
     assert(buf_len != 0);
 
     nn = recv(so->s, iov[0].iov_base, iov[0].iov_len, 0);
@@ -804,12 +805,13 @@ struct socket *tcpx_listen(Slirp *slirp,
     /* AF_INET6 addresses are bigger than AF_INET, so this is big enough. */
     char addrstr[INET6_ADDRSTRLEN];
     char portstr[6];
-    int ret;
     switch (haddr->sa_family) {
     case AF_INET:
-    case AF_INET6:
-        ret = getnameinfo(haddr, haddrlen, addrstr, sizeof(addrstr), portstr, sizeof(portstr), NI_NUMERICHOST|NI_NUMERICSERV);
+    case AF_INET6: {
+        int ret = getnameinfo(haddr, haddrlen, addrstr, sizeof(addrstr), portstr, sizeof(portstr), NI_NUMERICHOST|NI_NUMERICSERV);
+        (void)ret;
         g_assert(ret == 0);
+    }
         DEBUG_ARG("hfamily = INET");
         DEBUG_ARG("haddr = %s", addrstr);
         DEBUG_ARG("hport = %s", portstr);
@@ -1226,17 +1228,19 @@ int soassign_guest_addr_if_needed(struct socket *so)
 
     case AF_INET6:
         if (in6_zero(&so->so_laddr6)) {
-            int ret;
             if (in6_zero(&slirp->ndp_table.guest_in6_addr)) {
                 errno = EHOSTUNREACH;
                 return -1;
             }
             so->so_laddr6 = slirp->ndp_table.guest_in6_addr;
-            ret = getnameinfo((const struct sockaddr *) &so->lhost.ss,
-                              sizeof(so->lhost.ss), addrstr, sizeof(addrstr),
-                              portstr, sizeof(portstr),
-                              NI_NUMERICHOST|NI_NUMERICSERV);
-            g_assert(ret == 0);
+            {
+                int ret = getnameinfo((const struct sockaddr *) &so->lhost.ss,
+                                  sizeof(so->lhost.ss), addrstr, sizeof(addrstr),
+                                  portstr, sizeof(portstr),
+                                  NI_NUMERICHOST|NI_NUMERICSERV);
+                (void)ret;
+                g_assert(ret == 0);
+            }
             DEBUG_MISC("%s: new ip = [%s]:%s", __func__, addrstr, portstr);
         }
         break;

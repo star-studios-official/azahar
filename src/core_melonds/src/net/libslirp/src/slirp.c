@@ -553,6 +553,7 @@ static void slirp_init_once(void)
             { "tftp", DBG_TFTP },
             { "verbose_call", DBG_VERBOSE_CALL },
         };
+        (void)keys;
         slirp_debug = g_parse_debug_string(debug, keys, G_N_ELEMENTS(keys));
     }
 }
