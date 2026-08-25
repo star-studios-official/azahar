@@ -398,7 +398,7 @@ int slirp_fmt(char *str, size_t size, const char *format, ...)
         g_critical("slirp_fmt() truncation");
     }
 
-    return MIN(rv, size);
+    return MIN(rv, (int)size);
 }
 
 /*
@@ -417,11 +417,11 @@ int slirp_fmt0(char *str, size_t size, const char *format, ...)
     rv = slirp_vsnprintf(str, size, format, args);
     va_end(args);
 
-    if (rv >= size) {
+    if (rv >= (int)size) {
         g_critical("slirp_fmt0() truncation");
         if (size > 0)
             str[size - 1] = '\0';
-        rv = size;
+        rv = (int)size;
     } else {
         rv += 1; /* include \0 */
     }
