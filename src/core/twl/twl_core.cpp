@@ -1084,6 +1084,7 @@ std::vector<std::string> Core::GetDSiNANDTitles(const std::string& nand_path) {
             }
         } else {
             title_str = std::string(header.GameTitle, strnlen(header.GameTitle, sizeof(header.GameTitle)));
+        }
 
         if (!title_str.empty()) {
             char id_buf[16]{};
