@@ -440,7 +440,7 @@ void tcp_connect(struct socket *inso)
     struct sockaddr_storage addr;
     socklen_t addrlen;
     struct tcpcb *tp;
-    int s, opt, ret;
+    int s, opt;
     /* AF_INET6 addresses are bigger than AF_INET, so this is big enough. */
     char addrstr[INET6_ADDRSTRLEN];
     char portstr[6];
@@ -457,8 +457,10 @@ void tcp_connect(struct socket *inso)
     default:
         g_assert_not_reached();
     }
-    ret = getnameinfo((const struct sockaddr *) &inso->lhost.ss, addrlen, addrstr, sizeof(addrstr), portstr, sizeof(portstr), NI_NUMERICHOST|NI_NUMERICSERV);
-    g_assert(ret == 0);
+    {
+        int ret = getnameinfo((const struct sockaddr *) &inso->lhost.ss, addrlen, addrstr, sizeof(addrstr), portstr, sizeof(portstr), NI_NUMERICHOST|NI_NUMERICSERV);
+        g_assert(ret == 0);
+    }
     DEBUG_ARG("ip = [%s]:%s", addrstr, portstr);
     DEBUG_ARG("so_state = 0x%x", inso->so_state);
 
