@@ -157,7 +157,7 @@ static bool IsGameCardTWL(Core::System& system) {
     if (cartridge.empty()) {
         return false;
     }
-    const std::string ext = FileUtil::GetExtensionFromFilename(cartridge);
+    const std::string_view ext = FileUtil::GetExtensionFromFilename(cartridge);
     return (ext == "nds" || ext == "dsi");
 }
 
@@ -256,7 +256,7 @@ void Module::NSInterface::LaunchTitle(Kernel::HLERequestContext& ctx) {
     auto process = NS::LaunchTitle(apt->system, media_type, title_id);
     u32 pid = 0;
     if (process) {
-        pid = process->GetProcessID();
+        pid = process->process_id;
     }
 
     IPC::RequestBuilder rb = rp.MakeBuilder(2, 0);
