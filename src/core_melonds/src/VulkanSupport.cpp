@@ -25,8 +25,8 @@
 #include "Platform.h"
 
 #include <glslang/Public/ShaderLang.h>
-#include <glslang/Public/ResourceLimits.h>
-#include <glslang/SPIRV/GlslangToSpv.h>
+#include <glslang/Include/ResourceLimits.h>
+#include <SPIRV/GlslangToSpv.h>
 
 #ifdef _WIN32
 #include <windows.h>
