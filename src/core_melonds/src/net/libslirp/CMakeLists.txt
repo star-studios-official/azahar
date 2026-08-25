@@ -48,6 +48,10 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/src/libslirp-version.h.in" "${CMAKE_
 
 add_library(slirp STATIC ${SOURCES})
 target_compile_definitions(slirp PUBLIC LIBSLIRP_STATIC_BUILD)
+# Suppress warnings for third-party code
+if (APPLE)
+    target_compile_options(slirp PRIVATE "-Wno-shorten-64-to-32" "-Wno-implicit-function-declaration")
+endif()
 
 target_include_directories(slirp SYSTEM PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/glib")
 target_include_directories(slirp SYSTEM PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
