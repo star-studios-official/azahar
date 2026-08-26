@@ -163,19 +163,13 @@ final class EmulationViewModel: ObservableObject {
 
             // Check if this was a TWL FIRM launch (DS/DSi game selected from Home Menu)
             let resultCode = az_get_last_result()
-            if resultCode == 0x7FFF0001 {
-                var twlPath = [CChar](repeating: 0, count: 1024)
-                if az_check_twl_launch(&twlPath, Int32(twlPath.count)) {
-                    let romPath = String(cString: twlPath)
-                    AppLogger.info("TWL FIRM launch detected, ROM: \(romPath)")
-                    await MainActor.run {
-                        self.isRunning = false
-                        self.gameTitle = "DS Game: \(URL(fileURLWithPath: romPath).lastPathComponent)"
-                        // TODO: Launch melonDS backend with this ROM
-                        AppLogger.info("TWL FIRM: melonDS backend not yet integrated. ROM path stored: \(romPath)")
-                    }
-                    return
+            if resultCode == 0x7FFF0001 && az_check_twl_launch() {
+                AppLogger.info("TWL FIRM launch detected")
+                await MainActor.run {
+                    self.isRunning = false
+                    self.gameTitle = "DS Game"
                 }
+                return
             }
 
             await MainActor.run {

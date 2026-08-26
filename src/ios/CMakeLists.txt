@@ -139,6 +139,7 @@ set(AZAHAR_SWIFT_SOURCES
     AzaharApp/Views/Settings/SettingsView.swift
     AzaharApp/Views/Settings/SystemInfoView.swift
     AzaharApp/Views/Settings/JITSettingsView.swift
+    AzaharApp/Views/Settings/MelonDSSettingsView.swift
     AzaharApp/Views/Settings/LogViewerView.swift
     AzaharApp/Views/Applets/SoftwareKeyboardView.swift
     AzaharApp/Views/Applets/MiiSelectorView.swift
