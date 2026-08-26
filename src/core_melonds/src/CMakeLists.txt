@@ -59,6 +59,7 @@ add_library(core STATIC
     Utils.h
     Wifi.cpp
     WifiAP.cpp
+    platform_stubs.cpp
 
     DSP_HLE/UcodeBase.cpp
     DSP_HLE/AACUcode.cpp
@@ -242,12 +243,12 @@ target_include_directories(core PUBLIC "${CMAKE_CURRENT_BINARY_DIR}")
 
 set(BUILD_SHARED_LIBS OFF)
 if (NOT TARGET teakra)
-    # melonDS bundles its own teakra — only build it if Azahar's copy hasn't
+    # melonDS bundles its own teakra - only build it if Azahar's copy has not
     # already defined the target (from externals/teakra).
     add_subdirectory(teakra EXCLUDE_FROM_ALL)
     target_compile_options(teakra PRIVATE "$<$<CONFIG:DEBUG>:-Og>")
 else()
-    # Azahar's teakra already exists — add its include path so melonDS
+    # Azahar's teakra already exists - add its include path so melonDS
     # can find <teakra/teakra.h>.  The target lives in externals/teakra/src.
     target_include_directories(core PRIVATE "${CMAKE_SOURCE_DIR}/externals/teakra/include")
 endif()
