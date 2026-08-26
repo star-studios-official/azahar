@@ -552,7 +552,7 @@ struct MelonDSSettingsView: View {
             let savPath = dest.deletingPathExtension().appendingPathExtension("sav").path
             if FileManager.default.fileExists(atPath: savPath) {
                 gbaSavePath = savPath
-                AppLogger.info("GBA Cart", message: "Auto-detected save: \(savPath)")
+                AppLogger.info("GBA Cart: Auto-detected save: \(savPath)")
             }
         case .failure(let error):
             AppLogger.error("GBA Cart Import", message: "Failed: \(error.localizedDescription)")
@@ -571,7 +571,7 @@ struct MelonDSSettingsView: View {
             try? FileManager.default.removeItem(at: dest)
             try? FileManager.default.copyItem(at: url, to: dest)
             dsSavePath = dest.path
-            AppLogger.info("DS Save", message: "Imported save: \(dest.path)")
+            AppLogger.info("DS Save: Imported save: \(dest.path)")
         case .failure(let error):
             AppLogger.error("DS Save Import", message: "Failed: \(error.localizedDescription)")
         }
