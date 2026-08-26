@@ -103,6 +103,11 @@ static std::atomic<size_t> twl_audio_read_pos{0};
 static AudioComponentInstance twl_audio_unit = nullptr;
 static bool twl_audio_started = false;
 
+// Forward declarations for TWL audio functions
+static void twl_audio_start();
+static void twl_audio_stop();
+static void twl_audio_push_samples(const s16* samples, std::size_t num_samples, u32 sample_rate);
+
 // Pending surface layers (set before RunCitra creates the window)
 CAMetalLayer* pending_primary_layer = nullptr;
 float pending_primary_scale = 1.0f;
@@ -524,7 +529,7 @@ static void twl_audio_start() {
     AURenderCallbackStruct cb = {};
     cb.inputProc = twl_audio_render_callback;
     cb.inputProcRefCon = nullptr;
-    AudioUnitSetProperty(twl_audio_unit, kAudioOutputUnitProperty_SetRenderCallback,
+    AudioUnitSetProperty(twl_audio_unit, static_cast<AudioUnitPropertyID>(2003),
                          kAudioUnitScope_Input, 0, &cb, sizeof(cb));
 
     // Configure for 48000 Hz stereo output
@@ -556,201 +561,6 @@ static void twl_audio_stop() {
     twl_audio_write_pos.store(0);
     twl_audio_read_pos.store(0);
     LOG_INFO(Frontend, "TWL audio unit stopped");
-}
-
-/// Check if a TWL (DS/DSi) ROM launch was requested by the Home Menu.
-/// Returns true and fills out_path if a TWL launch is pending.
-/// out_path must be a buffer of at least 1024 bytes.
-bool az_check_twl_launch(char* out_path, int out_path_size) {
-    if (pending_twl_rom_path.empty() || !out_path || out_path_size <= 0) {
-        return false;
-    }
-    const auto& path = pending_twl_rom_path;
-    if (static_cast<int>(path.size()) >= out_path_size) {
-        return false;
-    }
-    std::memcpy(out_path, path.c_str(), path.size());
-    out_path[path.size()] = '\0';
-    pending_twl_rom_path.clear();
-    return true;
-}
-
-// melonDS BIOS file paths (indexed by bios_type)
-static std::string melonds_bios_paths[5]; // ARM9, ARM7, DSiARM9, DSiARM7, Firmware
-
-void az_set_melonds_bios(int bios_type, const char* path) {
-    if (bios_type >= 0 && bios_type < 5 && path) {
-        melonds_bios_paths[bios_type] = path;
-        LOG_INFO(Frontend, "melonDS BIOS[{}] set to: {}", bios_type, path);
-    }
-}
-
-const char* az_get_melonds_bios(int bios_type) {
-    if (bios_type >= 0 && bios_type < 5 && !melonds_bios_paths[bios_type].empty()) {
-        return melonds_bios_paths[bios_type].c_str();
-    }
-    return nullptr;
-}
-
-/// Run a DS/DSi ROM directly via melonDS without booting into the 3DS Home Menu.
-/// Called from Swift when a .nds/.srl file is loaded from the game library.
-void az_run_twl(const char* nds_rom_path) {
-    if (!nds_rom_path || !*nds_rom_path) {
-        LOG_ERROR(Frontend, "az_run_twl called with null/empty path");
-        last_result.store(AZ_CORE_ERROR_UNKNOWN);
-        return;
-    }
-
-    LOG_INFO(Frontend, "Direct TWL launch: {}", nds_rom_path);
-
-    Core::System& system = Core::System::GetInstance();
-    g_active_system = &system;
-
-    SCOPE_EXIT({ g_active_system = nullptr; });
-
-    if (!system.StartTWLCore(nds_rom_path)) {
-        LOG_ERROR(Frontend, "Failed to start melonDS core for: {}", nds_rom_path);
-        last_result.store(AZ_CORE_ERROR_UNKNOWN);
-        return;
-    }
-
-    LOG_INFO(Frontend, "melonDS core started, running emulation loop");
-
-    auto* twl = system.GetTWLCore();
-
-    // Reset TWL input state
-    twl_button_state.store(0);
-    twl_touch_pressed.store(false);
-    twl_touch_active.store(false);
-
-    // Set up audio callback and start AudioUnit
-    twl->SetAudioCallback(twl_audio_push_samples);
-    twl_audio_start();
-
-    while (!stop_run) {
-        if (!twl || !twl->IsRunning()) {
-            LOG_INFO(Frontend, "melonDS emulation ended");
-            break;
-        }
-
-        // Forward input
-        twl->SetButtonState(twl_button_state.load());
-        if (twl_touch_active.load()) {
-            TWL::TouchState touch;
-            touch.pressed = twl_touch_pressed.load();
-            touch.x = static_cast<u16>(twl_touch_x.load());
-            touch.y = static_cast<u16>(twl_touch_y.load());
-            twl->SetTouchState(touch);
-        }
-    }
-
-    twl_audio_stop();
-    system.StopTWLCore();
-    LOG_INFO(Frontend, "melonDS emulation ended");
-    last_result.store(0);
-}
-
-/// Boot DS firmware (NDS BIOS boot, no ROM required).
-/// Called from Swift when user selects "Boot DS Firmware" in settings.
-void az_run_twl_firmware(void) {
-    LOG_INFO(Frontend, "Direct TWL firmware boot (NDS mode)");
-
-    Core::System& system = Core::System::GetInstance();
-    g_active_system = &system;
-    SCOPE_EXIT({ g_active_system = nullptr; });
-
-    if (!system.StartTWLFirmware()) {
-        LOG_ERROR(Frontend, "Failed to start DS firmware boot");
-        last_result.store(AZ_CORE_ERROR_UNKNOWN);
-        return;
-    }
-
-    LOG_INFO(Frontend, "DS firmware boot started, running emulation loop");
-
-    auto* twl = system.GetTWLCore();
-    twl_button_state.store(0);
-    twl_touch_pressed.store(false);
-    twl_touch_active.store(false);
-    twl->SetAudioCallback(twl_audio_push_samples);
-    twl_audio_start();
-
-    while (!stop_run) {
-        if (!twl || !twl->IsRunning()) break;
-        twl->SetButtonState(twl_button_state.load());
-        if (twl_touch_active.load()) {
-            TWL::TouchState touch;
-            touch.pressed = twl_touch_pressed.load();
-            touch.x = static_cast<u16>(twl_touch_x.load());
-            touch.y = static_cast<u16>(twl_touch_y.load());
-            twl->SetTouchState(touch);
-        }
-    }
-
-    twl_audio_stop();
-    system.StopTWLCore();
-    LOG_INFO(Frontend, "DS firmware boot ended");
-    last_result.store(0);
-}
-
-/// Boot DSi mode with a NAND image.
-/// Called from Swift when user selects a DSi NAND file.
-void az_run_twl_dsi_nand(const char* nand_path) {
-    if (!nand_path || !*nand_path) {
-        LOG_ERROR(Frontend, "az_run_twl_dsi_nand called with null/empty path");
-        last_result.store(AZ_CORE_ERROR_UNKNOWN);
-        return;
-    }
-
-    LOG_INFO(Frontend, "Direct TWL DSi NAND boot: {}", nand_path);
-
-    Core::System& system = Core::System::GetInstance();
-    g_active_system = &system;
-    SCOPE_EXIT({ g_active_system = nullptr; });
-
-    if (!system.StartTWLDSiNAND(nand_path)) {
-        LOG_ERROR(Frontend, "Failed to start DSi NAND boot for: {}", nand_path);
-        last_result.store(AZ_CORE_ERROR_UNKNOWN);
-        return;
-    }
-
-    LOG_INFO(Frontend, "DSi NAND boot started, running emulation loop");
-
-    auto* twl = system.GetTWLCore();
-    twl_button_state.store(0);
-    twl_touch_pressed.store(false);
-    twl_touch_active.store(false);
-    twl->SetAudioCallback(twl_audio_push_samples);
-    twl_audio_start();
-
-    while (!stop_run) {
-        if (!twl || !twl->IsRunning()) break;
-        twl->SetButtonState(twl_button_state.load());
-        if (twl_touch_active.load()) {
-            TWL::TouchState touch;
-            touch.pressed = twl_touch_pressed.load();
-            touch.x = static_cast<u16>(twl_touch_x.load());
-            touch.y = static_cast<u16>(twl_touch_y.load());
-            twl->SetTouchState(touch);
-        }
-    }
-
-    twl_audio_stop();
-    system.StopTWLCore();
-    LOG_INFO(Frontend, "DSi NAND boot ended");
-    last_result.store(0);
-}
-
-/// Get list of titles on a DSi NAND (returns newline-separated string).
-static std::string dsi_nand_titles_cache;
-const char* az_get_dsi_nand_titles(const char* nand_path) {
-    if (!nand_path) return nullptr;
-    auto titles = TWL::Core::GetDSiNANDTitles(nand_path);
-    dsi_nand_titles_cache.clear();
-    for (const auto& t : titles) {
-        if (!dsi_nand_titles_cache.empty()) dsi_nand_titles_cache += '\n';
-        dsi_nand_titles_cache += t;
-    }
-    return dsi_nand_titles_cache.c_str();
 }
 
 void az_run(const char* path) {
@@ -935,7 +745,7 @@ bool az_twl_present_frame(void) {
                                             height:kDSHeight
                                          mipmapped:NO];
             desc.usage = MTLTextureUsageShaderRead;
-            desc.storageMode = MTLStorageModeManaged;
+            desc.storageMode = MTLStorageModeShared;
             s_twlTopTex = [device newTextureWithDescriptor:desc];
             s_twlBottomTex = [device newTextureWithDescriptor:desc];
         }
@@ -1482,7 +1292,7 @@ int az_get_game_icon(const char* path, uint16_t* out_icon_data, int buffer_size)
 
     // Try NDS ROM banner icon first (for .nds, .srl, .dsi files)
     const std::string filepath(path);
-    const std::string ext = FileUtil::GetExtensionFromFilename(filepath);
+    const std::string ext(FileUtil::GetExtensionFromFilename(filepath));
     if (ext == "nds" || ext == "srl" || ext == "dsi") {
         int result = ExtractNDSBannerIcon(path, out_icon_data, buffer_size);
         if (result > 0) {
@@ -1532,7 +1342,7 @@ bool az_get_game_metadata(const char* path, az_game_metadata* out_metadata) {
 
     // Try NDS banner first for .nds/.srl/.dsi files
     const std::string filepath(path);
-    const std::string ext = FileUtil::GetExtensionFromFilename(filepath);
+    const std::string ext(FileUtil::GetExtensionFromFilename(filepath));
     if (ext == "nds" || ext == "srl" || ext == "dsi") {
         FileUtil::IOFile file(path, "rb");
         if (file.IsOpen()) {
@@ -1571,20 +1381,20 @@ bool az_get_game_metadata(const char* path, az_game_metadata* out_metadata) {
                             file.ReadBytes(eng_title, sizeof(eng_title));
                             title_str = Common::UTF16ToUTF8(eng_title);
                             strncpy(out_metadata->title,
-                                    title_str.empty() ? FileUtil::GetFilename(path).c_str()
+                                    title_str.empty() ? std::string(FileUtil::GetFilename(path)).c_str()
                                                       : title_str.c_str(),
                                     255);
                             out_metadata->title[255] = '\0';
                         }
                     } else {
-                        strncpy(out_metadata->title, FileUtil::GetFilename(path).c_str(), 255);
+                        strncpy(out_metadata->title, std::string(FileUtil::GetFilename(path)).c_str(), 255);
                         out_metadata->title[255] = '\0';
                     }
                 } else {
                     // No banner, use NDS header title
                     std::string nds_title = FileSys::GetNDSGameTitle(nds_header);
                     strncpy(out_metadata->title,
-                            nds_title.empty() ? FileUtil::GetFilename(path).c_str()
+                            nds_title.empty() ? std::string(FileUtil::GetFilename(path)).c_str()
                                               : nds_title.c_str(),
                             255);
                     out_metadata->title[255] = '\0';
