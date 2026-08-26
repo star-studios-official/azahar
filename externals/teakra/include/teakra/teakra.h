@@ -29,7 +29,7 @@ static constexpr std::uint32_t DspMemorySize = 0x80000;
 
 class Teakra {
 public:
-    Teakra(const UserConfig& config);
+    Teakra(const UserConfig& config = {});
     ~Teakra();
 
     void Reset();
@@ -86,13 +86,18 @@ public:
 
     void SetAudioCallback(std::function<void(std::array<std::int16_t, 2>)> callback);
 
-    // Compatibility stubs for melonDS DSi_DSP integration
+    // External shared-memory access callbacks (byte addressed), used by emulators
+    // that need to route DSP shared memory through their own memory system (e.g.
+    // melonDS's DSi NWRAM) instead of a flat internal buffer.
     struct SharedMemoryCallback {
-        std::function<void(void*, bool)> read;
-        std::function<void(void*, bool)> write;
+        std::function<std::uint16_t(std::uint32_t address)> read16;
+        std::function<void(std::uint32_t address, std::uint16_t value)> write16;
     };
-    void SetSharedMemoryCallback(const SharedMemoryCallback& callback) {}
-    void SetMicEnableCallback(std::function<void(bool)> cb) {}
+    void SetSharedMemoryCallback(const SharedMemoryCallback& callback);
+
+    void SetMicEnableCallback(std::function<void(bool)> cb);
+
+    void SampleClock(std::int16_t output[2], std::int16_t input);
 
 private:
     struct Impl;

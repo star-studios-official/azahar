@@ -16,13 +16,13 @@
     with melonDS. If not, see http://www.gnu.org/licenses/.
 */
 
-#include "teakra/include/teakra/teakra.h"
 #include "DSP_HLE/AACUcode.h"
 #include "DSP_HLE/G711Ucode.h"
 #include "DSP_HLE/GraphicsUcode.h"
 
 #include "DSi.h"
 #include "DSi_DSP.h"
+#include "DSi_TeakraLLE.h"
 #include "FIFO.h"
 #include "NDS.h"
 #include "Platform.h"
@@ -122,7 +122,7 @@ void DSi_DSP::DoSavestate(Savestate* file)
 
             StopDSP();
 
-            if (id == Teakra::ID)
+            if (id == 0x7EAC0000) // Teakra::ID -> azahar's teakra via DSi_TeakraLLE
             {
                 StartDSPLLE();
             }
@@ -272,7 +272,9 @@ void DSi_DSP::StopDSP()
 
 void DSi_DSP::StartDSPLLE()
 {
-    auto teakra = new Teakra::Teakra();
+    // Azahar's shared teakra library (externals/teakra) is used to run the DSi
+    // DSP. It is adapted to melonDS's DSPInterface through DSi_TeakraLLE.
+    auto teakra = new DSi_TeakraLLE();
     DSPCore = teakra;
 
     using namespace std::placeholders;
@@ -283,10 +285,10 @@ void DSi_DSP::StartDSPLLE()
 
     teakra->SetSemaphoreHandler(std::bind(&DSi_DSP::IrqSem, this));
 
-    Teakra::SharedMemoryCallback smcb;
-    smcb.read16 = std::bind(&DSi_DSP::DSPRead16, this, _1);
-    smcb.write16 = std::bind(&DSi_DSP::DSPWrite16, this, _1, _2);
-    teakra->SetSharedMemoryCallback(smcb);
+    // route DSP data memory through the DSi's NWRAM (byte addressed)
+    teakra->SetSharedMemoryCallback(
+        std::bind(&DSi_DSP::DSPRead16, this, _1),
+        std::bind(&DSi_DSP::DSPWrite16, this, _1, _2));
 
     // these happen instantaneously and without too much regard for bus aribtration
     // rules, so, this might have to be changed later on

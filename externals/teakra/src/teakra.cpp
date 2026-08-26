@@ -158,6 +158,18 @@ void Teakra::SetAudioCallback(std::function<void(std::array<s16, 2>)> callback) 
     impl->btdmp[0].SetAudioCallback(std::move(callback));
 }
 
+void Teakra::SetSharedMemoryCallback(const SharedMemoryCallback& callback) {
+    impl->shared_memory.SetExternalMemoryCallback(callback.read16, callback.write16);
+}
+
+void Teakra::SetMicEnableCallback(std::function<void(bool)> cb) {
+    impl->btdmp[0].SetMicEnableCallback(std::move(cb));
+}
+
+void Teakra::SampleClock(std::int16_t output[2], std::int16_t input) {
+    impl->btdmp[0].SampleClock(output, input);
+}
+
 std::uint16_t Teakra::ProgramRead(std::uint32_t address) const {
     return impl->memory_interface.ProgramRead(address);
 }

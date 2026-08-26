@@ -18,6 +18,42 @@ void Btdmp::Reset() {
     transmit_empty = true;
     transmit_full = false;
     transmit_queue = {};
+
+    receive_clock_config = 0;
+    receive_period = 4096;
+    receive_timer = 0;
+    receive_enable = 0;
+    receive_empty = true;
+    receive_full = false;
+    receive_queue = {};
+}
+
+void Btdmp::SampleClock(std::int16_t output[2], std::int16_t input) {
+    if (transmit_enable && !transmit_queue.empty()) {
+        output[0] = static_cast<s16>(transmit_queue.front());
+        transmit_queue.pop();
+        output[1] = static_cast<s16>(transmit_queue.front());
+        transmit_queue.pop();
+        transmit_empty = transmit_queue.empty();
+        transmit_full = false;
+        if (transmit_empty && interrupt_handler)
+            interrupt_handler();
+    } else {
+        output[0] = 0;
+        output[1] = 0;
+    }
+
+    if (receive_enable) {
+        // due to the way the I2S interface works, each mic sample is duplicated
+        if (receive_queue.size() < 16)
+            receive_queue.push(input);
+        if (receive_queue.size() < 16)
+            receive_queue.push(input);
+        receive_empty = false;
+        receive_full = receive_queue.size() == 16;
+        if (receive_full && interrupt_handler)
+            interrupt_handler();
+    }
 }
 
 void Btdmp::Tick() {

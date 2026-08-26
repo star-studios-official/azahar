@@ -16,6 +16,68 @@ public:
 
     void Reset();
 
+    void SetReceiveClockConfig(u16 value) {
+        receive_clock_config = value;
+    }
+
+    u16 GetReceiveClockConfig() const {
+        return receive_clock_config;
+    }
+
+    void SetReceivePeriod(u16 value) {
+        receive_period = value;
+    }
+
+    u16 GetReceivePeriod() const {
+        return receive_period;
+    }
+
+    void SetReceiveEnable(u16 value) {
+        receive_enable = value;
+        if (mic_enable_callback)
+            mic_enable_callback(receive_enable != 0);
+    }
+
+    u16 GetReceiveEnable() const {
+        return receive_enable;
+    }
+
+    u16 GetReceiveEmpty() const {
+        return receive_empty ? 0 : 1;
+    }
+
+    u16 GetReceiveFull() const {
+        return receive_full;
+    }
+
+    u16 Receive() {
+        if (receive_queue.empty()) {
+            return 0;
+        }
+        u16 ret = receive_queue.front();
+        receive_queue.pop();
+        receive_empty = receive_queue.empty();
+        receive_full = false;
+        return ret;
+    }
+
+    void SetReceiveFlush(u16 value) {
+        (void)value;
+        receive_queue = {};
+        receive_empty = true;
+        receive_full = false;
+    }
+
+    u16 GetReceiveFlush() const {
+        return 0;
+    }
+
+    void SampleClock(std::int16_t output[2], std::int16_t input);
+
+    void SetMicEnableCallback(std::function<void(bool)> cb) {
+        mic_enable_callback = std::move(cb);
+    }
+
     void SetTransmitClockConfig(u16 value) {
         transmit_clock_config = value;
     }
@@ -90,8 +152,19 @@ private:
     bool transmit_empty = true;
     bool transmit_full = false;
     std::queue<u16> transmit_queue;
+
+    u16 receive_clock_config = 0;
+    u16 receive_period = 4096;
+    u16 receive_timer = 0;
+    u16 receive_enable = 0;
+    bool receive_empty = true;
+    bool receive_full = false;
+    std::queue<u16> receive_queue;
+
     std::function<void(std::array<std::int16_t, 2>)> audio_callback;
     std::function<void()> interrupt_handler;
+
+    std::function<void(bool)> mic_enable_callback;
 
     class BtdmpTimingCallbacks;
 };
